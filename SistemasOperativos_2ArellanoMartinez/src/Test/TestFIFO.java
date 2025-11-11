@@ -15,7 +15,7 @@ import edd.ListaSimple;
  * Clase de prueba para demostrar el funcionamiento del sistema de archivos
  * por consola - VERSIÓN ACTUALIZADA
  */
-public class Test {
+public class TestFIFO {
     
     public static void main(String[] args) {
         System.out.println("=== INICIANDO PRUEBA DEL SISTEMA DE ARCHIVOS (VERSIÓN MEJORADA) ===\n");
