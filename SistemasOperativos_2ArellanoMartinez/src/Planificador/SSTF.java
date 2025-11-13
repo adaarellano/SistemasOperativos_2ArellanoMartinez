@@ -6,64 +6,63 @@ package Planificador;
 
 import Models.SolicitudDisco;
 import edd.ListaSimple;
+import MainGUI.PanelConsola;
 
-/**
- * Implementación de política SSTF (Shortest Seek Time First)
- * Atiende la solicitud más cercana al cabezal actual
- * CON SALIDA DETALLADA EN CONSOLA
- */
 public class SSTF implements PlanificadorDisco {
     private ListaSimple colaSolicitudes;
     private int cabezalActual;
-    private boolean debugDetallado = true; // Activar salida detallada
+    private PanelConsola consola;  // ← Usamos ESTA referencia para logs
     
     public SSTF() {
         this.colaSolicitudes = new ListaSimple();
         this.cabezalActual = 0;
     }
     
+    public SSTF(PanelConsola consola) {
+        this();
+        this.consola = consola;  // ← Recibimos la consola real de la interfaz
+    }
+    
     @Override
     public void agregarSolicitud(SolicitudDisco solicitud) {
         colaSolicitudes.insertFinal(solicitud);
-        if (debugDetallado) {
-            System.out.println("SSTF - Solicitud agregada: " + solicitud.getTipoOperacion() + 
-                             " bloque " + solicitud.getBloqueSolicitado());
+        if (consola != null) {  // ← Verificamos si tenemos consola
+            consola.agregarLinea("SSTF - Solicitud agregada: " + solicitud.getTipoOperacion() + 
+                               " bloque " + solicitud.getBloqueSolicitado());
         }
     }
     
     @Override
     public SolicitudDisco obtenerSiguiente() {
         if (colaSolicitudes.isEmpty()) {
-            if (debugDetallado) {
-                System.out.println("SSTF - No hay solicitudes pendientes");
+            if (consola != null) {
+                consola.agregarLinea("SSTF - No hay solicitudes pendientes");
             }
             return null;
         }
         
-        if (debugDetallado) {
-            System.out.println("\n=== SSTF - BUSCANDO SIGUIENTE SOLICITUD ===");
-            System.out.println("Cabezal actual: " + cabezalActual);
-            System.out.println("Solicitudes pendientes: " + colaSolicitudes.getSize());
+        // SI TENEMOS CONSOLA, MOSTRAMOS DETALLES
+        if (consola != null) {
+            consola.agregarLinea("\n=== SSTF - BUSCANDO SIGUIENTE SOLICITUD ===");
+            consola.agregarLinea("Cabezal actual: " + cabezalActual);
+            consola.agregarLinea("Solicitudes pendientes: " + colaSolicitudes.getSize());
+            consola.agregarLinea("--- CALCULANDO DISTANCIAS ---");
         }
         
         SolicitudDisco masCercana = null;
         int distanciaMinima = Integer.MAX_VALUE;
         int indiceMasCercano = -1;
         
-        // Mostrar todas las distancias calculadas
-        if (debugDetallado) {
-            System.out.println("--- CALCULANDO DISTANCIAS ---");
-        }
-        
-        // Buscar la solicitud más cercana al cabezal actual
+        // Buscar la solicitud más cercana
         for (int i = 0; i < colaSolicitudes.getSize(); i++) {
             SolicitudDisco solicitud = (SolicitudDisco) colaSolicitudes.get(i);
             int bloque = solicitud.getBloqueSolicitado();
             int distancia = Math.abs(bloque - cabezalActual);
             
-            if (debugDetallado) {
-                System.out.println("  Bloque " + bloque + " - Distancia: " + distancia + 
-                                 " (|" + cabezalActual + " - " + bloque + "|)");
+            // MOSTRAR CÁLCULO EN CONSOLA
+            if (consola != null) {
+                consola.agregarLinea("  Bloque " + bloque + " - Distancia: " + distancia + 
+                                   " (|" + cabezalActual + " - " + bloque + "|)");
             }
             
             if (distancia < distanciaMinima) {
@@ -71,30 +70,30 @@ public class SSTF implements PlanificadorDisco {
                 masCercana = solicitud;
                 indiceMasCercano = i;
                 
-                if (debugDetallado) {
-                    System.out.println("    -> NUEVA MAS CERCANA: Bloque " + bloque + 
-                                     " (distancia: " + distancia + ")");
+                if (consola != null) {
+                    consola.agregarLinea("    -> NUEVA MAS CERCANA: Bloque " + bloque + 
+                                       " (distancia: " + distancia + ")");
                 }
             }
         }
         
         if (masCercana != null) {
-            // Eliminar la solicitud encontrada
+            // Eliminar y procesar
             Object elemento = colaSolicitudes.get(indiceMasCercano);
             colaSolicitudes.remove(elemento);
             
-            // Actualizar cabezal
             int nuevoCabezal = masCercana.getBloqueSolicitado();
             int distanciaRecorrida = Math.abs(nuevoCabezal - cabezalActual);
             
-            if (debugDetallado) {
-                System.out.println("--- RESULTADO SSTF ---");
-                System.out.println("Solicitud seleccionada: " + masCercana.getTipoOperacion() + 
-                                 " bloque " + nuevoCabezal);
-                System.out.println("Distancia recorrida: " + distanciaRecorrida);
-                System.out.println("Cabezal: " + cabezalActual + " -> " + nuevoCabezal);
-                System.out.println("Solicitudes restantes: " + colaSolicitudes.getSize());
-                System.out.println("=== FIN DECISION SSTF ===\n");
+            // MOSTRAR RESULTADO EN CONSOLA
+            if (consola != null) {
+                consola.agregarLinea("--- RESULTADO SSTF ---");
+                consola.agregarLinea("Solicitud seleccionada: " + masCercana.getTipoOperacion() + 
+                                   " bloque " + nuevoCabezal);
+                consola.agregarLinea("Distancia recorrida: " + distanciaRecorrida);
+                consola.agregarLinea("Cabezal: " + cabezalActual + " -> " + nuevoCabezal);
+                consola.agregarLinea("Solicitudes restantes: " + colaSolicitudes.getSize());
+                consola.agregarLinea("=== FIN DECISION SSTF ===\n");
             }
             
             cabezalActual = nuevoCabezal;
@@ -103,49 +102,26 @@ public class SSTF implements PlanificadorDisco {
         return masCercana;
     }
     
-    @Override
-    public ListaSimple getSolicitudesPendientes() {
-        return colaSolicitudes;
+    @Override 
+    public ListaSimple getSolicitudesPendientes() { 
+        return colaSolicitudes; 
     }
     
-    @Override
-    public String getNombrePolitica() {
-        return "SSTF";
+    @Override 
+    public String getNombrePolitica() { 
+        return "SSTF"; 
     }
     
-    @Override
-    public int getCabezalActual() {
-        return cabezalActual;
+    @Override 
+    public int getCabezalActual() { 
+        return cabezalActual; 
     }
     
-    @Override
-    public void setCabezalActual(int cabezal) {
-        if (debugDetallado) {
-            System.out.println("SSTF - Cabezal movido a: " + cabezal);
+    @Override 
+    public void setCabezalActual(int cabezal) { 
+        if (consola != null) {
+            consola.agregarLinea("SSTF - Cabezal movido a: " + cabezal);
         }
-        this.cabezalActual = cabezal;
-    }
-    
-    /**
-     * Método adicional para mostrar estado completo
-     */
-    public String getEstadoCompleto() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("SSTF - Estado Actual:\n");
-        sb.append("  Cabezal: ").append(cabezalActual).append("\n");
-        sb.append("  Solicitudes pendientes: ").append(colaSolicitudes.getSize()).append("\n");
-        
-        if (!colaSolicitudes.isEmpty()) {
-            sb.append("  Solicitudes en cola:\n");
-            for (int i = 0; i < colaSolicitudes.getSize(); i++) {
-                SolicitudDisco solicitud = (SolicitudDisco) colaSolicitudes.get(i);
-                int distancia = Math.abs(solicitud.getBloqueSolicitado() - cabezalActual);
-                sb.append("    - ").append(solicitud.getTipoOperacion())
-                  .append(" bloque ").append(solicitud.getBloqueSolicitado())
-                  .append(" (distancia: ").append(distancia).append(")\n");
-            }
-        }
-        
-        return sb.toString();
+        this.cabezalActual = cabezal; 
     }
 }

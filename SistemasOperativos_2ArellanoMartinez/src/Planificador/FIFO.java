@@ -7,29 +7,42 @@ package Planificador;
 
 import Models.SolicitudDisco;
 import edd.ListaSimple;
-
+import MainGUI.PanelConsola;
 /**
  * Implementación de política FIFO (First-In, First-Out)
  * La solicitud más antigua se atiende primero
  */
+
+
 public class FIFO implements PlanificadorDisco {
     private ListaSimple colaSolicitudes;
     private int cabezalActual;
+    private PanelConsola consola;
     
     public FIFO() {
         this.colaSolicitudes = new ListaSimple();
         this.cabezalActual = 0;
     }
     
+    public FIFO(PanelConsola consola) {
+        this();
+        this.consola = consola;
+    }
+
+    
     @Override
     public void agregarSolicitud(SolicitudDisco solicitud) {
         colaSolicitudes.insertFinal(solicitud);
-        System.out.println("FIFO - Solicitud agregada: " + solicitud);
+        if (consola != null) {
+            consola.agregarLinea("FIFO - Solicitud agregada: " + solicitud.getTipoOperacion() + 
+                               " bloque " + solicitud.getBloqueSolicitado());
+        }
     }
     
     @Override
     public SolicitudDisco obtenerSiguiente() {
         if (colaSolicitudes.isEmpty()) {
+            if (consola != null) consola.agregarLinea("FIFO - No hay solicitudes pendientes");
             return null;
         }
         
@@ -38,9 +51,18 @@ public class FIFO implements PlanificadorDisco {
         colaSolicitudes.remove(siguiente);
         
         // Actualizar cabezal
-        cabezalActual = siguiente.getBloqueSolicitado();
+        int nuevoCabezal = siguiente.getBloqueSolicitado();
+        int distancia = Math.abs(nuevoCabezal - cabezalActual);
         
-        System.out.println("FIFO - Procesando: " + siguiente);
+        if (consola != null) {
+            consola.agregarLinea("FIFO - Procesando: " + siguiente.getTipoOperacion() + 
+                               " bloque " + nuevoCabezal);
+            consola.agregarLinea("   - Distancia recorrida: " + distancia);
+            consola.agregarLinea("   - Cabezal: " + cabezalActual + " → " + nuevoCabezal);
+            consola.agregarLinea("   - Solicitudes restantes: " + colaSolicitudes.getSize());
+        }
+        
+        cabezalActual = nuevoCabezal;
         return siguiente;
     }
     
