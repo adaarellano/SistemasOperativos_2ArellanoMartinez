@@ -18,7 +18,7 @@ public class PanelControl extends JPanel {
     
     private JButton btnCrear, btnEditar, btnEliminar, btnActualizar;
     
-    public PanelControl(ManejadorArchivo manejador, PanelArchivos panelArchivos, PanelConsola panelConsola) {
+    public PanelControl(ManejadorArchivo manejador, PanelArchivos panelArchivos, PanelConsola panelConsola, PanelOutput panelOutput) {
         this.manejador = manejador;
         this.panelArchivos = panelArchivos;
         this.panelConsola = panelConsola;

@@ -12,6 +12,7 @@ import Planificador.CSCAN;
 import Planificador.PlanificadorDisco;
 import edd.ListaSimple;
 import MainGUI.PanelConsola;
+import MainGUI.PanelOutput;
 import java.util.*;
 
 /**
@@ -29,6 +30,8 @@ public class ManejadorArchivo {
     private boolean esModoAdministrador = true;
     private String usuarioActual = "admin";
     private ListaSimple usuarios; // Lista de usuarios del sistema
+    
+    private PanelOutput panelOutput;
     
     // === PROCESOS ===
     private ListaSimple colaProcesos;
@@ -369,6 +372,8 @@ public class ManejadorArchivo {
         return true;
     }
     
+    
+    
     /**
      * Libera los bloques asignados a un archivo - CON LOGS
      */
@@ -660,6 +665,10 @@ public class ManejadorArchivo {
         return ocupados;
     }
     
+     public void setPanelOutput(PanelOutput panelOutput) {
+        this.panelOutput = panelOutput;
+    }
+    
     public int getArchivosCreados() {
         return archivosCreados;
     }
@@ -677,8 +686,7 @@ public class ManejadorArchivo {
     // ===== INFORMACIÓN DEL SISTEMA =====
     
     public String getEstadoSistema() {
-        return String.format(
-            "=== ESTADO DEL SISTEMA ===\n" +
+        return String.format("=== ESTADO DEL SISTEMA ===\n" +
             "Usuario: %s (%s)\n" +
             "Archivos creados: %d\n" +
             "Archivos eliminados: %d\n" +
@@ -688,10 +696,33 @@ public class ManejadorArchivo {
             "Procesos activos: %d\n" +
             "Procesos en cola: %d",
             usuarioActual, esModoAdministrador ? "Admin" : "Usuario",
-            archivosCreados, archivosEliminados, operacionesRealizadas,
+            archivosCreados, getArchivosEliminados(), operacionesRealizadas,
             getBloquesOcupados(), totalBloques,
             planificadorActual.getNombrePolitica(),
             procesosActivos.getSize(), colaProcesos.getSize()
         );
+    }
+    
+    /**
+     * Método para mostrar detalles en el panel output
+     */
+    private void mostrarDetallesArchivo(Archivo archivo) {
+        if (panelOutput != null) {
+            panelOutput.mostrarDetallesArchivo(
+                archivo.getNombre(),
+                archivo.getTamañoBytes(),
+                archivo.getTamañoReservadoBytes(),
+                archivo.getTamañoBloques(),
+                archivo.getBloquesReservados(),
+                archivo.getInfoBloques()
+            );
+        }
+    }
+
+    /**
+     * @return the archivosEliminados
+     */
+    public int getArchivosEliminados() {
+        return archivosEliminados;
     }
 }

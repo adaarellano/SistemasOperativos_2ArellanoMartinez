@@ -4,7 +4,6 @@
  */
 package MainGUI;
 
-
 import javax.swing.*;
 import java.awt.*;
 
