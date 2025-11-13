@@ -19,7 +19,6 @@ public class Interfaz extends JFrame {
     private PanelArchivos panelArchivos;
     private PanelConsola panelConsola;
     private PanelControl panelControl;
-    private PanelOutput panelOutput;
     private JComboBox<String> comboPoliticas;
     
     public Interfaz() {
@@ -32,73 +31,38 @@ public class Interfaz extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
         
-        // Panel superior - Modos
-        JPanel panelSuperior = crearPanelSuperior();
-        
-        // Panel central
-        JSplitPane splitPrincipal = crearPanelCentral();
-        
-        add(panelSuperior, BorderLayout.NORTH);
-        add(splitPrincipal, BorderLayout.CENTER);
-        
-        configurarEventos();
-        
-        setSize(1000, 700);
-        setLocationRelativeTo(null);
-    }
-    
-    private JPanel crearPanelSuperior() {
+        // Panel superior - Modos y políticas
         JPanel panelSuperior = new JPanel(new FlowLayout());
-        panelSuperior.setBorder(BorderFactory.createTitledBorder("Control del Sistema"));
-        
         btnModoAdmin = new JButton("Modo Administrador");
         btnModoUsuario = new JButton("Modo Usuario");
         
         comboPoliticas = new JComboBox<>(new String[]{"FIFO", "SSTF", "SCAN", "C-SCAN"});
-        comboPoliticas.setEnabled(false);
+        comboPoliticas.setEnabled(false); // Solo admin puede cambiar
         
         panelSuperior.add(btnModoAdmin);
         panelSuperior.add(btnModoUsuario);
         panelSuperior.add(new JLabel("Política:"));
         panelSuperior.add(comboPoliticas);
         
-        return panelSuperior;
-    }
-    
-    private JSplitPane crearPanelCentral() {
-        // Panel izquierdo - Archivos
+        // Paneles principales
         panelArchivos = new PanelArchivos(manejador);
-        
-        // Panel derecho dividido verticalmente
-        JSplitPane splitDerecho = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-        
-        // Panel superior derecho - Consola
         panelConsola = new PanelConsola();
-        manejador.setPanelConsola(panelConsola);
+        panelControl = new PanelControl(manejador, panelArchivos, panelConsola);
+        panelControl.setVisible(false); // Inicialmente oculto
         
-        // Panel inferior derecho - Output
-        panelOutput = new PanelOutput();
-        manejador.setPanelOutput(panelOutput);
+        // Configurar división
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, 
+                                            panelArchivos, panelConsola);
+        splitPane.setDividerLocation(400);
         
-        splitDerecho.setTopComponent(panelConsola);
-        splitDerecho.setBottomComponent(panelOutput);
-        splitDerecho.setDividerLocation(350);
+        add(panelSuperior, BorderLayout.NORTH);
+        add(splitPane, BorderLayout.CENTER);
+        add(panelControl, BorderLayout.SOUTH);
         
-        // Panel de control (oculto inicialmente)
-        panelControl = new PanelControl(manejador, panelArchivos, panelConsola, panelOutput);
-        panelControl.setVisible(false);
+        configurarEventos();
         
-        // Panel principal izquierdo con archivos y controles
-        JPanel panelIzquierdo = new JPanel(new BorderLayout());
-        panelIzquierdo.add(panelArchivos, BorderLayout.CENTER);
-        panelIzquierdo.add(panelControl, BorderLayout.SOUTH);
-        
-        // Split principal
-        JSplitPane splitPrincipal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, 
-                                                panelIzquierdo, splitDerecho);
-        splitPrincipal.setDividerLocation(400);
-        
-        return splitPrincipal;
+        setSize(1000, 700);
+        setLocationRelativeTo(null);
     }
     
     private void configurarEventos() {
@@ -118,14 +82,16 @@ public class Interfaz extends JFrame {
         this.esModoAdministrador = esAdmin;
         panelControl.setVisible(esAdmin);
         comboPoliticas.setEnabled(esAdmin);
+        panelArchivos.actualizarVista(esAdmin);
         
         String modo = esAdmin ? "ADMINISTRADOR" : "USUARIO";
         panelConsola.agregarLinea("=== MODO " + modo + " ACTIVADO ===");
         
         if (esAdmin) {
-            panelConsola.agregarLinea("Operaciones CRUD disponibles");
+            panelConsola.agregarLinea("Acceso completo al sistema");
+            panelConsola.agregarLinea("Puede crear, editar y eliminar archivos");
         } else {
-            panelConsola.agregarLinea("Solo lectura - Ver archivos");
+            panelConsola.agregarLinea("Acceso limitado - Solo lectura");
         }
     }
     

@@ -1,11 +1,15 @@
+/*
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
+ */
 package MainGUI;
 
+
 import javax.swing.*;
-import javax.swing.text.*;
 import java.awt.*;
 
 public class PanelOutput extends JPanel {
-    private JTextArea textArea;
+    private JTextArea areaTexto;
     private JScrollPane scrollPane;
     
     public PanelOutput() {
@@ -14,37 +18,51 @@ public class PanelOutput extends JPanel {
     
     private void inicializarPanel() {
         setLayout(new BorderLayout());
-        setBorder(BorderFactory.createTitledBorder("Output del Sistema"));
+        setBorder(BorderFactory.createTitledBorder("Detalles del Sistema - Bytes y Bloques"));
         
-        textArea = new JTextArea();
-        textArea.setEditable(false);
-        textArea.setBackground(Color.WHITE);
-        textArea.setForeground(Color.BLACK);
-        textArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        areaTexto = new JTextArea();
+        areaTexto.setEditable(false);
+        areaTexto.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        areaTexto.setBackground(Color.WHITE);
+        areaTexto.setForeground(Color.BLACK);
+        areaTexto.setLineWrap(true);
+        areaTexto.setWrapStyleWord(true);
         
-        scrollPane = new JScrollPane(textArea);
+        scrollPane = new JScrollPane(areaTexto);
         add(scrollPane, BorderLayout.CENTER);
         
-        // Agregar texto inicial
-        agregarLinea("=== SISTEMA DE ARCHIVOS INICIADO ===");
-        agregarLinea("Esperando operaciones...");
+        // Mensaje inicial
+        agregarLinea("=== DETALLES DEL SISTEMA ===");
+        agregarLinea("Aquí se mostrarán los detalles de bytes, bloques y asignaciones");
+        agregarLinea("------------------------------------------------------------");
     }
     
     public void agregarLinea(String texto) {
         SwingUtilities.invokeLater(() -> {
-            textArea.append(texto + "\n");
-            
-            // Auto-scroll al final
-            int length = textArea.getDocument().getLength();
-            textArea.setCaretPosition(length);
+            areaTexto.append(texto + "\n");
+            areaTexto.setCaretPosition(areaTexto.getDocument().getLength());
         });
     }
     
-    public void limpiarOutput() {
+    public void limpiar() {
         SwingUtilities.invokeLater(() -> {
-            textArea.setText("");
-            agregarLinea("=== OUTPUT LIMPIADO ===");
-            agregarLinea("Sistema listo...");
+            areaTexto.setText("");
+            agregarLinea("=== DETALLES DEL SISTEMA ===");
+            agregarLinea("------------------------------------------------------------");
+        });
+    }
+    
+    public void mostrarDetallesArchivo(String nombre, int bytesReales, int bytesReservados, 
+                                     int bloquesUsados, int bloquesReservados, String cadenaBloques) {
+        SwingUtilities.invokeLater(() -> {
+            agregarLinea("📊 DETALLES DE ARCHIVO: " + nombre);
+            agregarLinea("   Bytes reales usados: " + bytesReales + " bytes");
+            agregarLinea("   Bytes reservados: " + bytesReservados + " bytes");
+            agregarLinea("   Espacio libre: " + (bytesReservados - bytesReales) + " bytes");
+            agregarLinea("   Bloques usados: " + bloquesUsados + "/" + bloquesReservados);
+            agregarLinea("   Eficiencia: " + String.format("%.1f", (bytesReales * 100.0 / bytesReservados)) + "%");
+            agregarLinea("   Cadena de bloques: " + cadenaBloques);
+            agregarLinea("------------------------------------------------------------");
         });
     }
 }
