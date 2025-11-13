@@ -48,6 +48,7 @@ public class ManejadorArchivo {
     
     // === REFERENCIA A INTERFAZ ===
     private PanelConsola panelConsola;
+    private boolean esAdministrador;
     
     public ManejadorArchivo() {
         inicializarSistema();
@@ -372,6 +373,9 @@ public class ManejadorArchivo {
         return true;
     }
     
+    public void setEsAdministrador(boolean esAdmin) {
+        this.esAdministrador = esAdmin;
+    }
     
     
     /**

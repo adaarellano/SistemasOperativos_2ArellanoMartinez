@@ -30,6 +30,8 @@ public class Interfaz extends JFrame {
     private PanelControl panelControl;
     private PanelDetalles panelDetalles; // NUEVO: Panel para detalles
     private JComboBox<String> comboPoliticas;
+    private JSplitPane splitPrincipal;
+
     
     // Para persistencia JSON
     private Gson gson;
@@ -49,7 +51,7 @@ public class Interfaz extends JFrame {
         
         // Panel superior - Modos y políticas
         JPanel panelSuperior = crearPanelSuperior();
-        
+        splitPrincipal = crearPanelCentral();
         // Panel central dividido en 3 partes
         JSplitPane splitPrincipal = crearPanelCentral();
         
@@ -93,30 +95,29 @@ public class Interfaz extends JFrame {
         return panelSuperior;
     }
     
-    private JSplitPane crearPanelCentral() {
+     private JSplitPane crearPanelCentral() {
         // Panel izquierdo - Archivos
         panelArchivos = new PanelArchivos(manejador);
         
         // Panel derecho dividido verticalmente
         JSplitPane splitDerecho = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
         
-        // Panel superior derecho - Consola (negro/verde)
+        // Panel superior derecho - Consola
         panelConsola = new PanelConsola();
-        manejador.setPanelConsola(panelConsola); // Conectar consola al manejador
+        manejador.setPanelConsola(panelConsola);
         
-        // Panel inferior derecho - Output detallado (blanco/negro)
+        // Panel inferior derecho - Output
         PanelOutput panelOutput = new PanelOutput();
-        manejador.setPanelOutput(panelOutput); // NUEVO: Conectar output detallado
+        manejador.setPanelOutput(panelOutput);
         
         splitDerecho.setTopComponent(panelConsola);
         splitDerecho.setBottomComponent(panelOutput);
         splitDerecho.setDividerLocation(300);
-        
-        // Panel de control (oculto inicialmente)
+
+        // **CORRECCIÓN: PanelControl debe estar en el layout principal, no en el split**
         panelControl = new PanelControl(manejador, panelArchivos, panelConsola, panelOutput);
-        panelControl.setVisible(false);
         
-        // Split principal
+        // Split principal (izquierda: archivos, derecha: consola+output)
         JSplitPane splitPrincipal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, 
                                                 panelArchivos, splitDerecho);
         splitPrincipal.setDividerLocation(500);
@@ -137,25 +138,32 @@ public class Interfaz extends JFrame {
         });
     }
     
-    private void cambiarModo(boolean esAdmin) {
+     private void cambiarModo(boolean esAdmin) {
         this.esModoAdministrador = esAdmin;
-        panelControl.setVisible(esAdmin);
+        manejador.setEsAdministrador(esAdmin); // **IMPORTANTE: Actualizar el manejador**
+        
+        // **CORRECCIÓN: Mostrar/ocultar el panel de control en el layout principal**
+        if (esAdmin) {
+            // Agregar panelControl al sur (inferior) del frame
+            add(panelControl, BorderLayout.SOUTH);
+        } else {
+            // Remover panelControl
+            remove(panelControl);
+        }
+        
         comboPoliticas.setEnabled(esAdmin);
         panelArchivos.actualizarVista(esAdmin);
         
         String modo = esAdmin ? "ADMINISTRADOR" : "USUARIO";
         panelConsola.agregarLinea("=== MODO " + modo + " ACTIVADO ===");
         
-        if (esAdmin) {
-            panelConsola.agregarLinea("Acceso completo al sistema");
-            panelConsola.agregarLinea("Puede crear, editar y eliminar archivos");
-        } else {
-            panelConsola.agregarLinea("Acceso limitado - Solo lectura");
-        }
+        // **IMPORTANTE: Revalidar y repintar para que los cambios se reflejen**
+        revalidate();
+        repaint();
         
         panelDetalles.actualizarDetalles();
     }
-    
+
     // ===== PERSISTENCIA CON JSON =====
     
     private void guardarEstado() {
