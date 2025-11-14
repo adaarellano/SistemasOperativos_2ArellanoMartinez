@@ -109,12 +109,12 @@ public class ManejadorArchivo {
         logConsola("Usuario: " + usuario);
         
         if (!verificarPermisosEscritura(usuario)) {
-            logConsola("❌ ERROR: Sin permisos para crear archivo");
+            logConsola("ERROR: Sin permisos para crear archivo");
             return false;
         }
         
         if (!hayEspacioSuficiente(tamañoBloques)) {
-            logConsola("❌ ERROR: No hay espacio suficiente");
+            logConsola("ERROR: No hay espacio suficiente");
             return false;
         }
         
@@ -129,7 +129,7 @@ public class ManejadorArchivo {
             // Buscar o crear directorio
             Directorio directorioDestino = buscarOCrearDirectorio(rutaDirectorio);
             if (directorioDestino == null) {
-                logConsola("❌ ERROR: No se pudo encontrar/crear el directorio");
+                logConsola("ERROR: No se pudo encontrar/crear el directorio");
                 return false;
             }
             
@@ -140,7 +140,7 @@ public class ManejadorArchivo {
             logConsola("Asignando " + tamañoBloques + " bloques...");
             // Asignar bloques al archivo
             if (!asignarBloquesArchivo(nuevoArchivo, tamañoBloques)) {
-                logConsola("❌ ERROR: No se pudieron asignar bloques");
+                logConsola("ERROR: No se pudieron asignar bloques");
                 return false;
             }
             
@@ -491,7 +491,7 @@ public class ManejadorArchivo {
                 // Mover a procesos activos
                 procesosActivos.insertFinal(proceso);
                 colaProcesos.remove(proceso);
-                logConsola("📊 Proceso en ejecución: " + proceso.getNombre());
+                logConsola("Proceso en ejecución: " + proceso.getNombre());
                 break;
             }
         }
