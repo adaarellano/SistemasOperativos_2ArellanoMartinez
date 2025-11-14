@@ -29,6 +29,8 @@ public class Interfaz extends JFrame {
     private PanelConsola panelConsola;
     private PanelControl panelControl;
     private PanelDetalles panelDetalles; // NUEVO: Panel para detalles
+    private PanelDisco panelDisco;
+    private PanelTablaAsignacion panelTablaAsignacion;
     private JComboBox<String> comboPoliticas;
     
     // Para persistencia JSON
@@ -38,6 +40,7 @@ public class Interfaz extends JFrame {
     public Interfaz() {
         this.gson = new GsonBuilder().setPrettyPrinting().create();
         this.manejador = new ManejadorArchivo();
+        
         inicializarGUI();
         cargarEstado(); // Cargar estado anterior si existe
     }
@@ -94,31 +97,47 @@ public class Interfaz extends JFrame {
     }
     
     private JSplitPane crearPanelCentral() {
-        // Panel izquierdo - Archivos
+        // === PANEL IZQUIERDO (Archivos + Disco) ===
+        JPanel panelIzquierdo = new JPanel(new BorderLayout());
+
+        // 1. Panel de Archivos (JTree)
         panelArchivos = new PanelArchivos(manejador);
-        
-        // Panel derecho dividido verticalmente
-        JSplitPane splitDerecho = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-        
-        // Panel superior derecho - Consola (negro/verde)
+
+        // 2. Panel de Disco (Cuadrícula)
+        panelDisco = new PanelDisco(manejador); // <-- INICIALIZA EL NUEVO PANEL
+
+        // Usamos un JSplitPane vertical para el lado izquierdo
+        JSplitPane splitIzquierdo = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
+                                                 panelArchivos, panelDisco);
+        splitIzquierdo.setDividerLocation(400); // Dale más espacio al JTree
+        panelIzquierdo.add(splitIzquierdo, BorderLayout.CENTER);
+
+        // === PANEL DERECHO (Consolas) ===
+        JTabbedPane panelDerecho = new JTabbedPane();
+
+        // 3. Pestaña 1: Consola (negro/verde)
         panelConsola = new PanelConsola();
-        manejador.setPanelConsola(panelConsola); // Conectar consola al manejador
-        
-        // Panel inferior derecho - Output detallado (blanco/negro)
+        manejador.setPanelConsola(panelConsola);
+        panelDerecho.addTab("Consola", panelConsola);
+
+        // 4. Pestaña 2: Tabla de Asignación (NUEVO)
+        panelTablaAsignacion = new PanelTablaAsignacion(manejador);
+        panelDerecho.addTab("Tabla de Asignación", panelTablaAsignacion);
+
+        // 5. Pestaña 3: Output detallado (blanco/negro)
         PanelOutput panelOutput = new PanelOutput();
-        manejador.setPanelOutput(panelOutput); // NUEVO: Conectar output detallado
+        manejador.setPanelOutput(panelOutput);
+        panelDerecho.addTab("Detalles (Bytes)", panelOutput);
         
-        splitDerecho.setTopComponent(panelConsola);
-        splitDerecho.setBottomComponent(panelOutput);
-        splitDerecho.setDividerLocation(300);
-        
-        // Panel de control (oculto inicialmente)
-        panelControl = new PanelControl(manejador, panelArchivos, panelConsola, panelOutput);
+        // === PANEL DE CONTROL (Oculto) ===
+        // Le pasamos 'panelOutput' desde su declaración original
+        panelControl = new PanelControl(manejador, panelArchivos, panelConsola, panelOutput, panelDisco, panelTablaAsignacion); // <-- Añadido panelTablaAsignacion
         panelControl.setVisible(false);
         
-        // Split principal
-        JSplitPane splitPrincipal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, 
-                                                panelArchivos, splitDerecho);
+        // === SPLIT PRINCIPAL ===
+        // (Ahora divide el panelIzquierdo y el panelDerecho)
+        JSplitPane splitPrincipal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
+                                                 panelIzquierdo, panelDerecho); // <-- 'splitDerecho' es ahora 'panelDerecho'
         splitPrincipal.setDividerLocation(500);
         
         return splitPrincipal;

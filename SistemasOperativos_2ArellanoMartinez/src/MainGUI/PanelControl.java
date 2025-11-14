@@ -15,13 +15,17 @@ public class PanelControl extends JPanel {
     private ManejadorArchivo manejador;
     private PanelArchivos panelArchivos;
     private PanelConsola panelConsola;
+    private PanelDisco panelDisco;
+    private PanelTablaAsignacion panelTablaAsignacion;
     
     private JButton btnCrear, btnEditar, btnEliminar, btnActualizar;
     
-    public PanelControl(ManejadorArchivo manejador, PanelArchivos panelArchivos, PanelConsola panelConsola, PanelOutput panelOutput) {
+    public PanelControl(ManejadorArchivo manejador, PanelArchivos panelArchivos, PanelConsola panelConsola, PanelOutput panelOutput, PanelDisco panelDisco, PanelTablaAsignacion panelTablaAsignacion) {
         this.manejador = manejador;
         this.panelArchivos = panelArchivos;
         this.panelConsola = panelConsola;
+        this.panelDisco = panelDisco;
+        this.panelTablaAsignacion = panelTablaAsignacion;
         inicializarPanel();
     }
     
@@ -47,6 +51,7 @@ public class PanelControl extends JPanel {
         btnEditar.addActionListener(e -> editarArchivo());
         btnEliminar.addActionListener(e -> eliminarArchivo());
         btnActualizar.addActionListener(e -> panelArchivos.actualizarArbol());
+        
     }
     
     private void crearArchivo() {
@@ -63,6 +68,8 @@ public class PanelControl extends JPanel {
                 if (exito) {
                     panelConsola.agregarLinea("Archivo creado: " + nombre + " (" + tamano + " bloques)");
                     panelArchivos.actualizarArbol();
+                    panelDisco.actualizarDisco();
+                    panelTablaAsignacion.actualizarTabla();
                 } else {
                     panelConsola.agregarLinea("ERROR: No se pudo crear el archivo");
                 }
@@ -116,6 +123,8 @@ public class PanelControl extends JPanel {
                 if (exito) {
                     panelConsola.agregarLinea("Archivo eliminado: " + nombreArchivo);
                     panelArchivos.actualizarArbol();
+                    panelDisco.actualizarDisco();
+                    panelTablaAsignacion.actualizarTabla();
                 } else {
                     panelConsola.agregarLinea("ERROR: No se pudo eliminar el archivo");
                 }
