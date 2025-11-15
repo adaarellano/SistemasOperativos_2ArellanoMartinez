@@ -32,6 +32,7 @@ public class Interfaz extends JFrame {
     private PanelDisco panelDisco;
     private PanelTablaAsignacion panelTablaAsignacion;
     private JComboBox<String> comboPoliticas;
+    private PanelProcesos panelProcesos;
     
     // Para persistencia JSON
     private Gson gson;
@@ -58,6 +59,7 @@ public class Interfaz extends JFrame {
         
         // Panel inferior - Detalles del sistema
         panelDetalles = new PanelDetalles(manejador);
+        manejador.setPanelDetalles(panelDetalles);
         
         add(panelSuperior, BorderLayout.NORTH);
         add(splitPrincipal, BorderLayout.CENTER);
@@ -102,9 +104,11 @@ public class Interfaz extends JFrame {
 
         // 1. Panel de Archivos (JTree)
         panelArchivos = new PanelArchivos(manejador);
+        manejador.setPanelArchivos(panelArchivos);
 
         // 2. Panel de Disco (Cuadrícula)
         panelDisco = new PanelDisco(manejador); // <-- INICIALIZA EL NUEVO PANEL
+        manejador.setPanelDisco(panelDisco);
 
         // Usamos un JSplitPane vertical para el lado izquierdo
         JSplitPane splitIzquierdo = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
@@ -112,32 +116,38 @@ public class Interfaz extends JFrame {
         splitIzquierdo.setDividerLocation(400); // Dale más espacio al JTree
         panelIzquierdo.add(splitIzquierdo, BorderLayout.CENTER);
 
-        // === PANEL DERECHO (Consolas) ===
+        // === PANEL DERECHO (Con Pestañas) ===
         JTabbedPane panelDerecho = new JTabbedPane();
 
-        // 3. Pestaña 1: Consola (negro/verde)
+        // Pestaña 1: Consola
         panelConsola = new PanelConsola();
         manejador.setPanelConsola(panelConsola);
         panelDerecho.addTab("Consola", panelConsola);
 
-        // 4. Pestaña 2: Tabla de Asignación (NUEVO)
+        // Pestaña 2: Gestor de Procesos (NUEVO)
+        panelProcesos = new PanelProcesos(manejador); // <-- AÑADE ESTAS LÍNEAS
+        panelDerecho.addTab("Gestor de Procesos", panelProcesos);
+
+        // Pestaña 3: Tabla de Asignación
         panelTablaAsignacion = new PanelTablaAsignacion(manejador);
+            manejador.setPanelTablaAsignacion(panelTablaAsignacion);
         panelDerecho.addTab("Tabla de Asignación", panelTablaAsignacion);
 
-        // 5. Pestaña 3: Output detallado (blanco/negro)
+        // Pestaña 4: Detalles (Bytes)
         PanelOutput panelOutput = new PanelOutput();
         manejador.setPanelOutput(panelOutput);
         panelDerecho.addTab("Detalles (Bytes)", panelOutput);
-        
+
         // === PANEL DE CONTROL (Oculto) ===
         // Le pasamos 'panelOutput' desde su declaración original
         panelControl = new PanelControl(manejador, panelArchivos, panelConsola, panelOutput, panelDisco, panelTablaAsignacion); // <-- Añadido panelTablaAsignacion
         panelControl.setVisible(false);
         
+        panelIzquierdo.add(panelControl, BorderLayout.NORTH);
+        
         // === SPLIT PRINCIPAL ===
         // (Ahora divide el panelIzquierdo y el panelDerecho)
-        JSplitPane splitPrincipal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
-                                                 panelIzquierdo, panelDerecho); // <-- 'splitDerecho' es ahora 'panelDerecho'
+        JSplitPane splitPrincipal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, panelIzquierdo, panelDerecho);
         splitPrincipal.setDividerLocation(500);
         
         return splitPrincipal;
@@ -207,6 +217,7 @@ public class Interfaz extends JFrame {
         }
     }
     
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             new Interfaz().setVisible(true);

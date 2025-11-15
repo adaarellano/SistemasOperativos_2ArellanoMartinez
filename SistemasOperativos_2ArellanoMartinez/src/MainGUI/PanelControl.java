@@ -63,16 +63,13 @@ public class PanelControl extends JPanel {
                 
                 // Crear archivo en la raíz por simplicidad
                 String ruta = "/" + nombre;
-                boolean exito = manejador.crearArchivo(ruta, tamano, "admin");
-                
-                if (exito) {
-                    panelConsola.agregarLinea("Archivo creado: " + nombre + " (" + tamano + " bloques)");
-                    panelArchivos.actualizarArbol();
-                    panelDisco.actualizarDisco();
-                    panelTablaAsignacion.actualizarTabla();
-                } else {
-                    panelConsola.agregarLinea("ERROR: No se pudo crear el archivo");
-                }
+               // CAMBIO: Ya no llamamos a crearArchivo directamente.
+                // Ahora solicitamos un PROCESO para que haga el trabajo.
+                manejador.solicitarOperacion("CREAR", ruta, "admin", tamano);
+
+                panelConsola.agregarLinea("Solicitud de PROCESO 'CREAR' enviada para: " + nombre);
+
+                panelConsola.agregarLinea("Solicitud de PROCESO 'CREAR' enviada para: " + nombre);
             } catch (NumberFormatException ex) {
                 JOptionPane.showMessageDialog(this, "Tamaño inválido");
             }
@@ -92,11 +89,16 @@ public class PanelControl extends JPanel {
             
             if (nuevoContenido != null) {
                 String ruta = "/" + nombreArchivo;
+                // CAMBIO: Solicitamos un PROCESO para actualizar.
+                // Pasamos el contenido nuevo en el 'Proceso.java' (aunque tu constructor actual no lo pide,
+                // el 'ManejadorArchivo.solicitarOperacion' lo ignora. Lo ideal sería mejorarlo,
+                // pero por ahora usamos el 'manejador.actualizarArchivo' para simular).
+
+                // Solución temporal (ya que 'solicitarOperacion' no tiene para 'datos'):
                 boolean exito = manejador.actualizarArchivo(ruta, nuevoContenido, "admin");
-                
+
                 if (exito) {
-                    panelConsola.agregarLinea("Archivo editado: " + nombreArchivo);
-                    panelConsola.agregarLinea("Nuevo contenido: " + nuevoContenido);
+                    panelConsola.agregarLinea("Archivo editado (modo directo): " + nombreArchivo);
                 } else {
                     panelConsola.agregarLinea("ERROR: No se pudo editar el archivo");
                 }
@@ -117,17 +119,14 @@ public class PanelControl extends JPanel {
                 JOptionPane.YES_NO_OPTION);
             
             if (confirmacion == JOptionPane.YES_OPTION) {
-                String ruta = "/" + nombreArchivo;
-                boolean exito = manejador.eliminarArchivo(ruta, "admin");
-                
-                if (exito) {
-                    panelConsola.agregarLinea("Archivo eliminado: " + nombreArchivo);
-                    panelArchivos.actualizarArbol();
-                    panelDisco.actualizarDisco();
-                    panelTablaAsignacion.actualizarTabla();
-                } else {
-                    panelConsola.agregarLinea("ERROR: No se pudo eliminar el archivo");
-                }
+             String ruta = "/" + nombreArchivo;
+
+             // CAMBIO: Solicitamos un PROCESO para eliminar.
+             manejador.solicitarOperacion("ELIMINAR", ruta, "admin", 0);
+
+             panelConsola.agregarLinea("Solicitud de PROCESO 'ELIMINAR' enviada para: " + nombreArchivo);
+
+             panelConsola.agregarLinea("Solicitud de PROCESO 'ELIMINAR' enviada para: " + nombreArchivo);
             }
         } else {
             JOptionPane.showMessageDialog(this, "Seleccione un archivo primero");

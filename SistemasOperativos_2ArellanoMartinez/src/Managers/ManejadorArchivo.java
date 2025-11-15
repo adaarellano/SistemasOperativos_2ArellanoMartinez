@@ -11,9 +11,11 @@ import Planificador.SCAN;
 import Planificador.CSCAN;
 import Planificador.PlanificadorDisco;
 import edd.ListaSimple;
-import MainGUI.PanelConsola;
+import MainGUI.*;
 import MainGUI.PanelOutput;
 import java.util.*;
+import javax.swing.SwingUtilities;
+import Managers.*;
 
 /**
  * Manejador principal del sistema de archivos
@@ -30,9 +32,10 @@ public class ManejadorArchivo {
     private boolean esModoAdministrador = true;
     private String usuarioActual = "admin";
     private ListaSimple usuarios; // Lista de usuarios del sistema
-    
+    private int cabezalActual = 0; // <-- AÑADIR ESTA LÍNEA
+    private Thread hiloDisco; //
     private PanelOutput panelOutput;
-    
+    private volatile boolean sistemaActivo = true;
     // === PROCESOS ===
     private ListaSimple colaProcesos;
     private ListaSimple procesosActivos;
@@ -48,12 +51,17 @@ public class ManejadorArchivo {
     
     // === REFERENCIA A INTERFAZ ===
     private PanelConsola panelConsola;
+    private PanelArchivos panelArchivos; // <-- AÑADIR
+    private PanelDisco panelDisco; // <-- AÑADIR
+    private PanelTablaAsignacion panelTablaAsignacion; 
+    private PanelDetalles panelDetalles; 
+    private BufferManager bufferManager;
     
     public ManejadorArchivo() {
         inicializarSistema();
     }
     
-    public ManejadorArchivo(PanelConsola panelConsola) {
+    public ManejadorArchivo(PanelConsola panelConsola, BufferManager bufferManager) {
         this.panelConsola = panelConsola;
         inicializarSistema();
     }
@@ -71,14 +79,18 @@ public class ManejadorArchivo {
         // 3. Inicializar colas
         colaProcesos = new ListaSimple();
         procesosActivos = new ListaSimple();
-        solicitudesDisco = new ListaSimple();
+        solicitudesDisco = new ListaSimple(); // 'solicitudesDisco' aquí es un 'ListaSimple'
         usuarios = new ListaSimple();
         
         // 4. Crear usuarios por defecto
         crearUsuariosPorDefecto();
         
         // 5. Inicializar planificador (FIFO por defecto)
-        planificadorActual = new FIFO();
+        // El 'setPanelConsola' lo inicializará correctamente
+        planificadorActual = new FIFO(); 
+        
+        // 6. Iniciar el hilo del disco
+        iniciarHiloDisco(); // <-- AÑADIR ESTO
         
         logConsola("=== SISTEMA DE ARCHIVOS INICIALIZADO ===");
         logConsola("Total bloques: " + totalBloques);
@@ -173,41 +185,55 @@ public class ManejadorArchivo {
     /**
      * Lee el contenido de un archivo - CON LOGS MEJORADOS
      */
-    public String leerArchivo(String ruta, String usuario) {
+   public String leerArchivo(String ruta, String usuario) {
         logConsola("=== SOLICITANDO LECTURA DE ARCHIVO ===");
         logConsola("Ruta: " + ruta);
         logConsola("Usuario: " + usuario);
-        
+
         if (!verificarPermisosLectura(usuario)) {
             logConsola("❌ ERROR: Acceso denegado");
             return "Acceso denegado";
         }
-        
+
         Archivo archivo = buscarArchivo(ruta);
         if (archivo == null) {
             logConsola("❌ ERROR: Archivo no encontrado");
             return "Archivo no encontrado: " + ruta;
         }
-        
-        if (!archivo.getUsuarioPropietario().equals(usuario) && !esModoAdministrador) {
-            logConsola("❌ ERROR: No tiene permisos para leer este archivo");
-            return "No tiene permisos para leer este archivo";
-        }
-        
+
+        // ... (resto de verificaciones de permisos si las tienes) ...
+
         logConsola("Archivo encontrado: " + archivo.getNombre());
         logConsola("Tamaño: " + archivo.getTamañoBytes() + " bytes");
+
+        // --- ¡LÓGICA DEL BUFFER! ---
+        // Por simplicidad, solo comprobamos el primer bloque del archivo.
         
-        // Crear solicitud de disco para lectura
+        Bloque primerBloque = archivo.getPrimerBloque();
+        
+        if (primerBloque != null) {
+            // 1. Preguntar al buffer primero
+            Bloque bloqueEnCache = bufferManager.leerBloque(primerBloque.getIdBloque());
+            
+            if (bloqueEnCache != null) {
+                // ¡CACHE HIT! No necesitamos ir al disco.
+                logConsola("✅ CACHE HIT: Datos leídos desde RAM (Buffer). Rápido.");
+                operacionesRealizadas++;
+                return archivo.leerContenido(); // Devolver contenido al instante
+            }
+        }
+        
+        // ¡CACHE MISS! El bloque no está en el buffer.
+        // Debemos solicitarlo al disco (lento).
+        logConsola("❌ CACHE MISS: Datos no encontrados en RAM. Solicitando E/S al disco...");
+        
+        // Crear solicitud de disco para lectura (Este es el flujo lento)
         if (archivo.getPrimerBloque() != null) {
             crearSolicitudDisco("READ", archivo.getPrimerBloque().getIdBloque(), usuario);
         }
-        
+
         operacionesRealizadas++;
-        
-        String contenido = archivo.leerContenido();
-        logConsola("✅ CONTENIDO LEÍDO: '" + contenido + "'");
-        
-        return contenido;
+        return archivo.leerContenido();
     }
     
     /**
@@ -364,15 +390,50 @@ public class ManejadorArchivo {
         
         // Marcar bloques como ocupados
         for (int i = 0; i < bloquesAsignados.getSize(); i++) {
-            Bloque bloque = (Bloque) bloquesAsignados.get(i);
-            bloque.ocuparBloque(archivo.getNombre(), -1);
+        Bloque bloque = (Bloque) bloquesAsignados.get(i);
+        bloque.ocuparBloque(archivo.getNombre(), -1);
         }
-        
+
         logConsola("✅ " + cantidadBloques + " bloques asignados exitosamente");
         return true;
     }
-    
-    
+
+    /**
+     * Inicia el hilo del "Demonio de Disco".
+     * Este hilo se ejecuta en segundo plano, revisa la cola de solicitudes
+     * y le pide al planificador actual cuál procesar a continuación.
+     */
+    private void iniciarHiloDisco() {
+        hiloDisco = new Thread(() -> {
+            logConsola("💿 Hilo del disco iniciado. Esperando solicitudes...");
+            
+            while (sistemaActivo) {
+                try {
+                    // 1. Pedir la siguiente solicitud al planificador
+                    SolicitudDisco solicitud = planificadorActual.obtenerSiguiente();
+                    
+                    if (solicitud != null) {
+                        // 2. Si hay una, procesarla
+                        procesarSolicitudDisco(solicitud); // Llama a la NUEVA versión
+                    } else {
+                        // 3. Si no hay, esperar un momento
+                        Thread.sleep(500); // Espera si la cola está vacía
+                    }
+                    
+                } catch (InterruptedException e) {
+                    if (sistemaActivo) logConsola("Hilo del disco interrumpido.");
+                    sistemaActivo = false;
+                } catch (Exception e) {
+                    logConsola("❌ Error en el hilo del disco: " + e.getMessage());
+                }
+            }
+            logConsola("💿 Hilo del disco detenido.");
+        });
+        
+        hiloDisco.setName("Disco-Scheduler-Thread");
+        hiloDisco.setDaemon(true); 
+        hiloDisco.start();
+    }
     
     /**
      * Libera los bloques asignados a un archivo - CON LOGS
@@ -410,32 +471,58 @@ public class ManejadorArchivo {
     // ===== GESTIÓN DE SOLICITUDES DE DISCO =====
     
     /**
-     * Crea una nueva solicitud de disco - CON LOGS MEJORADOS
+     * Crea una nueva solicitud de disco y la AÑADE A LA COLA del planificador.
+     * Ya NO la procesa directamente.
      */
     private void crearSolicitudDisco(String tipoOperacion, int bloque, String usuario) {
-        logConsola("📋 CREANDO SOLICITUD DE DISCO");
+        logConsola("📋 ENCOLANDO SOLICLITUD DE DISCO");
         logConsola("   Tipo: " + tipoOperacion);
         logConsola("   Bloque: " + bloque);
-        logConsola("   Usuario: " + usuario);
         logConsola("   Planificador: " + planificadorActual.getNombrePolitica());
+
+        // El constructor de SolicitudDisco pide un Proceso.
+        Proceso dummyProceso = new Proceso(tipoOperacion, "ruta_desconocida", usuario);
+        SolicitudDisco nuevaSolicitud = new SolicitudDisco(dummyProceso, tipoOperacion, bloque);
         
-        // Simular procesamiento
-        procesarSolicitudDisco(tipoOperacion, bloque);
+        // Añadir la solicitud al planificador activo
+        planificadorActual.agregarSolicitud(nuevaSolicitud);
+        
+        logConsola("   ✅ Solicitud ENCOLADA. (El planificador decidirá...)");
+        logConsola("   Solicitudes pendientes: " + planificadorActual.getSolicitudesPendientes().getSize());
     }
     
     /**
-     * Procesa una solicitud de disco (simulación) - CON LOGS MEJORADOS
+     * Procesa UNA solicitud de disco específica. (NUEVA VERSIÓN)
+     * Este método es llamado por el hiloDisco, NO directamente.
      */
-    private void procesarSolicitudDisco(String tipoOperacion, int bloque) {
-        logConsola("⚡ PROCESANDO SOLICITUD DE DISCO");
-        logConsola("   Operación: " + tipoOperacion);
-        logConsola("   Bloque objetivo: " + bloque);
+    private void procesarSolicitudDisco(SolicitudDisco solicitud) {
+        if (solicitud == null) return;
+        
+        logConsola("⚡ PROCESANDO SOLICITUD (Decidido por " + planificadorActual.getNombrePolitica() + ")");
+        logConsola("   Operación: " + solicitud.getTipoOperacion());
+        logConsola("   Bloque objetivo: " + solicitud.getBloqueSolicitado());
+        
+        // Calcular distancia y mover cabezal
+        int distancia = Math.abs(solicitud.getBloqueSolicitado() - this.cabezalActual);
+        this.cabezalActual = solicitud.getBloqueSolicitado();
+        
+        logConsola("   Cabezal se mueve a: " + this.cabezalActual + " (Distancia: " + distancia + ")");
         
         // Simular tiempo de E/S
         try {
             logConsola("   Simulando tiempo de E/S...");
-            Thread.sleep(800); // Más tiempo para ver en la interfaz
-            logConsola("   ✅ Operación completada");
+            Thread.sleep(800); // 800ms de tiempo de acceso
+            
+            // --- ¡AQUÍ ESTÁ TU LÓGICA DE BUFFER! ---
+            // Si fue una lectura (un CACHE MISS), ahora llenamos el caché.
+            if (solicitud.getTipoOperacion().equals("READ")) {
+                Bloque bloqueLeido = bloquesDisco[solicitud.getBloqueSolicitado()];
+                if (bufferManager != null) {
+                    bufferManager.agregarBloque(bloqueLeido);
+                }
+            }
+            
+            logConsola("   ✅ Operación completada en bloque " + this.cabezalActual);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             logConsola("   ❌ Operación interrumpida");
@@ -477,10 +564,25 @@ public class ManejadorArchivo {
     }
     
     private void planificarProcesos() {
+        // --- NUEVO: Parte 1 - Limpiar procesos terminados ---
+        // Recorremos la lista de activos para "limpiar" los que ya terminaron
+        for (int i = 0; i < procesosActivos.getSize(); i++) {
+            Proceso p = (Proceso) procesosActivos.get(i);
+            if (p.estaTerminado()) {
+                logConsola("♻️ Limpiando proceso terminado: " + p.getNombre());
+                procesosActivos.remove(p);
+                i--; // Ajustar el índice después de eliminar
+                actualizarGUICompleta();
+            }
+        }
+
+        // --- Parte 2 - Planificar nuevos procesos (Tu código original) ---
         // Lógica simple de planificación: tomar el primer proceso listo
         for (int i = 0; i < colaProcesos.getSize(); i++) {
             Proceso proceso = (Proceso) colaProcesos.get(i);
-            if (proceso.estaListo()) {
+            
+            // Con el Arreglo 1, esto ahora devolverá true
+            if (proceso.estaListo()) { 
                 proceso.setEstado(Proceso.Estado.EJECUTANDO);
                 proceso.permitirEjecucion();
                 
@@ -488,7 +590,7 @@ public class ManejadorArchivo {
                 procesosActivos.insertFinal(proceso);
                 colaProcesos.remove(proceso);
                 logConsola("📊 Proceso en ejecución: " + proceso.getNombre());
-                break;
+                break; // Solo planifica uno a la vez (simple)
             }
         }
     }
@@ -588,33 +690,45 @@ public class ManejadorArchivo {
     public void cambiarPlanificador(String tipoPlanificador) {
         logConsola("=== CAMBIANDO PLANIFICADOR ===");
         logConsola("Planificador anterior: " + planificadorActual.getNombrePolitica());
+        logConsola("Cabezal actual en: " + this.cabezalActual);
+
+        // Guardar la cola de solicitudes pendientes
+        ListaSimple pendientes = planificadorActual.getSolicitudesPendientes();
         
         switch(tipoPlanificador.toUpperCase()) {
             case "FIFO":
-                planificadorActual = new FIFO();
+                planificadorActual = new FIFO(panelConsola);
                 logConsola("Nuevo planificador: FIFO (First-In-First-Out)");
                 break;
             case "SSTF":
-                planificadorActual = new SSTF();
+                planificadorActual = new SSTF(panelConsola);
                 logConsola("Nuevo planificador: SSTF (Shortest Seek Time First)");
-                logConsola("  - Elige siempre la solicitud más cercana al cabezal");
                 break;
             case "SCAN":
                 planificadorActual = new SCAN();
                 logConsola("Nuevo planificador: SCAN (Elevator Algorithm)");
-                logConsola("  - Funciona como un ascensor, va y viene");
                 break;
             case "C-SCAN":
                 planificadorActual = new CSCAN();
                 logConsola("Nuevo planificador: C-SCAN (Circular SCAN)");
-                logConsola("  - Siempre en una dirección, vuelve al inicio");
                 break;
             default:
                 logConsola("❌ ERROR: Planificador no válido: " + tipoPlanificador);
                 return;
         }
         
-        logConsola("✅ Planificador cambiado exitosamente");
+        // Restaurar el estado al nuevo planificador
+        planificadorActual.setCabezalActual(this.cabezalActual);
+        
+        // Volver a encolar las solicitudes pendientes
+        if (pendientes != null && !pendientes.isEmpty()) {
+            logConsola("...Moviendo " + pendientes.getSize() + " solicitudes pendientes al nuevo planificador...");
+            for (int i = 0; i < pendientes.getSize(); i++) {
+                planificadorActual.agregarSolicitud((SolicitudDisco) pendientes.get(i));
+            }
+        }
+        
+        logConsola("✅ Planificador cambiado exitosamente a " + planificadorActual.getNombrePolitica());
     }
     
     // ===== GETTERS PARA LA INTERFAZ GRÁFICA =====
@@ -681,8 +795,38 @@ public class ManejadorArchivo {
     
     public void setPanelConsola(PanelConsola panelConsola) {
         this.panelConsola = panelConsola;
+        // Ahora 'panelConsola' no es null, por lo que esto es seguro.
+        if (this.bufferManager == null) {
+            this.bufferManager = new BufferManager(this.panelConsola);
+        }
     }
     
+        /**
+     * Fuerza una actualización de todos los paneles de la GUI.
+     */
+    private void actualizarGUICompleta() {
+        if (panelArchivos != null) panelArchivos.actualizarArbol();
+        if (panelDisco != null) panelDisco.actualizarDisco();
+        if (panelTablaAsignacion != null) panelTablaAsignacion.actualizarTabla();
+        if (panelDetalles != null) panelDetalles.actualizarDetalles();
+    }
+    
+    public void setPanelArchivos(PanelArchivos panel) {
+    this.panelArchivos = panel;
+    }
+
+    public void setPanelDisco(PanelDisco panel) {
+        this.panelDisco = panel;
+    }
+
+    public void setPanelTablaAsignacion(PanelTablaAsignacion panel) {
+        this.panelTablaAsignacion = panel;
+    }
+
+    public void setPanelDetalles(PanelDetalles panel) {
+        this.panelDetalles = panel;
+    }
+
     // ===== INFORMACIÓN DEL SISTEMA =====
     
     public String getEstadoSistema() {
