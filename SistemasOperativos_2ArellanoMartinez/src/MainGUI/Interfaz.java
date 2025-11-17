@@ -29,9 +29,15 @@ public class Interfaz extends JFrame {
     private PanelConsola panelConsola;
     private PanelControl panelControl;
     private PanelDetalles panelDetalles; // NUEVO: Panel para detalles
+    private PanelDisco panelDisco;
+    private PanelTablaAsignacion panelTablaAsignacion;
     private JComboBox<String> comboPoliticas;
+<<<<<<< HEAD
     private JSplitPane splitPrincipal;
 
+=======
+    private PanelProcesos panelProcesos;
+>>>>>>> day
     
     // Para persistencia JSON
     private Gson gson;
@@ -40,6 +46,7 @@ public class Interfaz extends JFrame {
     public Interfaz() {
         this.gson = new GsonBuilder().setPrettyPrinting().create();
         this.manejador = new ManejadorArchivo();
+        
         inicializarGUI();
         cargarEstado(); // Cargar estado anterior si existe
     }
@@ -57,6 +64,7 @@ public class Interfaz extends JFrame {
         
         // Panel inferior - Detalles del sistema
         panelDetalles = new PanelDetalles(manejador);
+        manejador.setPanelDetalles(panelDetalles);
         
         add(panelSuperior, BorderLayout.NORTH);
         add(splitPrincipal, BorderLayout.CENTER);
@@ -95,6 +103,7 @@ public class Interfaz extends JFrame {
         return panelSuperior;
     }
     
+<<<<<<< HEAD
      private JSplitPane crearPanelCentral() {
         // Panel izquierdo - Archivos
         panelArchivos = new PanelArchivos(manejador);
@@ -120,6 +129,58 @@ public class Interfaz extends JFrame {
         // Split principal (izquierda: archivos, derecha: consola+output)
         JSplitPane splitPrincipal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, 
                                                 panelArchivos, splitDerecho);
+=======
+    private JSplitPane crearPanelCentral() {
+        // === PANEL IZQUIERDO (Archivos + Disco) ===
+        JPanel panelIzquierdo = new JPanel(new BorderLayout());
+
+        // 1. Panel de Archivos (JTree)
+        panelArchivos = new PanelArchivos(manejador);
+        manejador.setPanelArchivos(panelArchivos);
+
+        // 2. Panel de Disco (Cuadrícula)
+        panelDisco = new PanelDisco(manejador); // <-- INICIALIZA EL NUEVO PANEL
+        manejador.setPanelDisco(panelDisco);
+
+        // Usamos un JSplitPane vertical para el lado izquierdo
+        JSplitPane splitIzquierdo = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
+                                                 panelArchivos, panelDisco);
+        splitIzquierdo.setDividerLocation(400); // Dale más espacio al JTree
+        panelIzquierdo.add(splitIzquierdo, BorderLayout.CENTER);
+
+        // === PANEL DERECHO (Con Pestañas) ===
+        JTabbedPane panelDerecho = new JTabbedPane();
+
+        // Pestaña 1: Consola
+        panelConsola = new PanelConsola();
+        manejador.setPanelConsola(panelConsola);
+        panelDerecho.addTab("Consola", panelConsola);
+
+        // Pestaña 2: Gestor de Procesos (NUEVO)
+        panelProcesos = new PanelProcesos(manejador); // <-- AÑADE ESTAS LÍNEAS
+        panelDerecho.addTab("Gestor de Procesos", panelProcesos);
+
+        // Pestaña 3: Tabla de Asignación
+        panelTablaAsignacion = new PanelTablaAsignacion(manejador);
+            manejador.setPanelTablaAsignacion(panelTablaAsignacion);
+        panelDerecho.addTab("Tabla de Asignación", panelTablaAsignacion);
+
+        // Pestaña 4: Detalles (Bytes)
+        PanelOutput panelOutput = new PanelOutput();
+        manejador.setPanelOutput(panelOutput);
+        panelDerecho.addTab("Detalles (Bytes)", panelOutput);
+
+        // === PANEL DE CONTROL (Oculto) ===
+        // Le pasamos 'panelOutput' desde su declaración original
+        panelControl = new PanelControl(manejador, panelArchivos, panelConsola, panelOutput, panelDisco, panelTablaAsignacion); // <-- Añadido panelTablaAsignacion
+        panelControl.setVisible(false);
+        
+        panelIzquierdo.add(panelControl, BorderLayout.NORTH);
+        
+        // === SPLIT PRINCIPAL ===
+        // (Ahora divide el panelIzquierdo y el panelDerecho)
+        JSplitPane splitPrincipal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, panelIzquierdo, panelDerecho);
+>>>>>>> day
         splitPrincipal.setDividerLocation(500);
         
         return splitPrincipal;
@@ -196,6 +257,7 @@ public class Interfaz extends JFrame {
         }
     }
     
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             new Interfaz().setVisible(true);

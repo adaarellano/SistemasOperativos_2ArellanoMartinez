@@ -1,0 +1,9 @@
+{
+  "archivosCreados": 1,
+  "archivosEliminados": 0,
+  "operacionesRealizadas": 1,
+  "bloquesOcupados": 5,
+  "planificadorActual": "FIFO",
+  "usuarioActual": "admin",
+  "esModoAdministrador": true
+}

@@ -257,7 +257,7 @@ public class Proceso {
         
         this.estado = Estado.LISTO;
         this.tiempoLlegada = System.currentTimeMillis();
-        this.pausado = true; // Iniciar pausado hasta que se planifique
+        this.pausado = false; // <-- CORREGIDO
         this.ejecutando = false;
         
         System.out.println("Proceso INICIADO: " + nombre + " [LISTO]");
