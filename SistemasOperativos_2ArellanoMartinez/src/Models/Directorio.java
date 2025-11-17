@@ -367,4 +367,18 @@ public class Directorio {
         
         return sb.toString();
     }
+    
+    public boolean eliminarSubdirectorio(Directorio subdirectorio) {
+    for (int i = 0; i < subdirectorios.getSize(); i++) {
+        Directorio subdir = (Directorio) subdirectorios.get(i);
+        if (subdir == subdirectorio) {
+            Object elemento = subdirectorios.get(i);
+            subdirectorios.remove(elemento);
+            actualizarFechaModificacion();
+            return true;
+        }
+    }
+    return false;
+}
+    
 }

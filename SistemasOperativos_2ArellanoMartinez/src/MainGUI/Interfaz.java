@@ -202,24 +202,23 @@ public class Interfaz extends JFrame {
         });
     }
     
-    // Clase interna para el estado del sistema (JSON)
     private static class EstadoSistema {
-        private int archivosCreados;
-        private int archivosEliminados;
-        private int operacionesRealizadas;
-        private int bloquesOcupados;
-        private String planificadorActual;
-        private String usuarioActual;
-        private boolean esModoAdministrador;
-        
-        public EstadoSistema(ManejadorArchivo manejador) {
-            this.archivosCreados = manejador.getArchivosCreados();
-            this.archivosEliminados = manejador.getArchivosEliminados();
-            this.operacionesRealizadas = manejador.getOperacionesRealizadas();
-            this.bloquesOcupados = manejador.getBloquesOcupados();
-            this.planificadorActual = manejador.getPlanificadorActual().getNombrePolitica();
-            this.usuarioActual = manejador.getUsuarioActual();
-            this.esModoAdministrador = manejador.esAdministrador();
-        }
+    private int archivosCreados;
+    private int archivosEliminados;
+    private int operacionesRealizadas;
+    private int bloquesOcupados;
+    private String planificadorActual;
+    private String usuarioActual;
+    private boolean esModoAdministrador;
+    
+    public EstadoSistema(ManejadorArchivo manejador) {
+        this.archivosCreados = manejador.getArchivosCreados();
+        this.archivosEliminados = manejador.getArchivosEliminados();
+        this.operacionesRealizadas = manejador.getOperacionesRealizadas();
+        this.bloquesOcupados = manejador.getBloquesOcupados();
+        this.planificadorActual = manejador.getPlanificadorActual(); // Ahora funciona
+        this.usuarioActual = manejador.getUsuarioActual(); // Ahora funciona
+        this.esModoAdministrador = manejador.esAdministrador();
     }
 }
+        }

@@ -36,20 +36,27 @@ public class PanelArchivos extends JPanel {
         arbolArchivos.setRootVisible(true);
         arbolArchivos.setShowsRootHandles(true);
         
+        // Agregar listener para doble clic
+        arbolArchivos.addTreeSelectionListener(e -> {
+            DefaultMutableTreeNode nodo = (DefaultMutableTreeNode) arbolArchivos.getLastSelectedPathComponent();
+            if (nodo != null && nodo.getUserObject() instanceof String) {
+                // Puedes agregar funcionalidad de selección aquí
+            }
+        });
+        
         add(new JScrollPane(arbolArchivos), BorderLayout.CENTER);
     }
     
     public void actualizarVista(boolean esAdmin) {
         actualizarArbol();
-        // Aquí podrías cambiar colores o estilos según el modo
     }
     
     public void actualizarArbol() {
-        DefaultMutableTreeNode raiz = new DefaultMutableTreeNode("Sistema de Archivos");
-        modeloArbol.setRoot(raiz);
+        DefaultMutableTreeNode raizArbol = new DefaultMutableTreeNode("Sistema de Archivos");
+        modeloArbol.setRoot(raizArbol);
         
-        // Agregar directorio raíz
-        agregarDirectorioAlArbol(manejador.getRaiz(), raiz);
+        // Agregar directorio raíz del sistema simulado
+        agregarDirectorioAlArbol(manejador.getRaiz(), raizArbol);
         
         // Expandir todo
         for (int i = 0; i < arbolArchivos.getRowCount(); i++) {
@@ -70,8 +77,7 @@ public class PanelArchivos extends JPanel {
         for (int i = 0; i < archivos.getSize(); i++) {
             Archivo archivo = (Archivo) archivos.get(i);
             String textoArchivo = archivo.getNombre() + " (" + 
-                                archivo.getTamañoBloques() + "/" + 
-                                archivo.getBloquesReservados() + " bloques)";
+                                archivo.getTamañoBloques() + " bloques)";
             nodoDirectorio.add(new DefaultMutableTreeNode(textoArchivo));
         }
         
@@ -88,9 +94,18 @@ public class PanelArchivos extends JPanel {
         if (seleccion != null) {
             Object ultimoComponente = seleccion.getLastPathComponent();
             if (ultimoComponente instanceof DefaultMutableTreeNode) {
-                return ultimoComponente.toString();
+                String texto = ultimoComponente.toString();
+                // Extraer solo el nombre del archivo (antes del paréntesis)
+                if (texto.contains("(")) {
+                    return texto.split("\\(")[0].trim();
+                }
+                return texto;
             }
         }
         return null;
+    }
+    
+    public JTree getArbolArchivos() {
+        return arbolArchivos;
     }
 }
