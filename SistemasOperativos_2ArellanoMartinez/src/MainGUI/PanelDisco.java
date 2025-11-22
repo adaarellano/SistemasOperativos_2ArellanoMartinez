@@ -41,36 +41,33 @@ public class PanelDisco extends JPanel {
      */
     @Override
     protected void paintComponent(Graphics g) {
-        super.paintComponent(g); // Limpia el panel
+        super.paintComponent(g); 
         
         Bloque[] bloques = manejador.getBloquesDisco();
         if (bloques == null) return;
         
-        // Posición inicial para dibujar (con un pequeño margen)
         int x = 20;
         int y = 30;
         
         for (int i = 0; i < bloques.length; i++) {
             Bloque bloque = bloques[i];
             
-            // Elegir color
+            // --- CAMBIO CLAVE: USAR EL COLOR DEL BLOQUE ---
             if (bloque.estaLibre()) {
-                g.setColor(Color.GREEN.darker()); // Libre
+                g.setColor(Color.GREEN.darker()); 
             } else {
-                g.setColor(Color.RED.darker()); // Ocupado
+                // Usamos el color específico del archivo
+                g.setColor(bloque.getColor()); 
             }
+            // ----------------------------------------------
             
-            // Dibujar el bloque (un rectángulo relleno)
             g.fillRect(x, y, TAMANO_BLOQUE_PX, TAMANO_BLOQUE_PX);
             
-            // Dibujar borde negro
             g.setColor(Color.BLACK);
             g.drawRect(x, y, TAMANO_BLOQUE_PX, TAMANO_BLOQUE_PX);
             
-            // Mover a la siguiente posición
             x += TAMANO_BLOQUE_PX;
             
-            // Si llegamos al final de una fila, saltar a la siguiente
             if ((i + 1) % COLUMNAS == 0) {
                 x = 20;
                 y += TAMANO_BLOQUE_PX;

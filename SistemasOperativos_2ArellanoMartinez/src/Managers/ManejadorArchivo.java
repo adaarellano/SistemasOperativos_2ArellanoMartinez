@@ -392,16 +392,16 @@ public class ManejadorArchivo {
             actual = siguiente;
         }
         
+
         // Marcar bloques como ocupados
         for (int i = 0; i < bloquesAsignados.getSize(); i++) {
             Bloque bloque = (Bloque) bloquesAsignados.get(i);
-            bloque.ocuparBloque(archivo.getNombre(), -1);
+            
+            // AHORA PASAMOS EL COLOR DEL ARCHIVO
+            bloque.ocuparBloque(archivo.getNombre(), -1, archivo.getColor());
         }
 
         logConsola("✅ " + cantidadBloques + " bloques asignados exitosamente");
-        
-        
-        logConsola("📉 Bloques restantes: " + (getTotalBloques() - getBloquesOcupados()) + "/" + getTotalBloques());
         return true;
     }
 

@@ -4,9 +4,11 @@
  */
 package Models;
 
+import java.awt.Color; // Importante para los colores del disco
+
 /**
  * Clase que representa un archivo en el sistema de archivos
- * Con gestión de bloques, permisos y metadatos
+ * Con gestión de bloques, permisos, metadatos y colores visuales.
  */
 public class Archivo {
     private String nombre;
@@ -14,34 +16,34 @@ public class Archivo {
     private int tamañoBytes;           // Tamaño REAL del contenido
     private int tamañoBloques;         // Bloques USADOS realmente
     
-    // *** CAMPO CLAVE FALTANTE: El inicio de la lista enlazada ***
+    // Puntero al inicio de la lista enlazada de bloques
     private Bloque primerBloque;       
     
-    private String usuarioPropietario; // Compatibilidad con nombre de variable en Manejador
+    private String usuarioPropietario;
     private String permisos;
-    public String fechaCreacion;
-    private long fechaModificacionLong; // Para ordenamientos
+    private String fechaCreacion;
+    private long fechaModificacionLong;
     private String contenido;
     private String rutaCompleta;
-    private String rutaReal; // Para gestión de archivos reales
+    private String rutaReal;
     
-    // NUEVOS CAMPOS PARA GESTIÓN CORRECTA
-    private int tamañoReservadoBytes;  // Bytes reservados al crear (bloques × 1024)
+    private int tamañoReservadoBytes;  // Bytes reservados (bloques * 1024)
     private int bloquesReservados;     // Bloques reservados al crear
     
-    // Estados del archivo
     private boolean estaAbierto;
     private boolean esPublico;
     
+    // Color único para representar este archivo en el PanelDisco
+    private Color color; 
+    
     /**
-     * Constructor principal usado por ManejadorArchivo
+     * Constructor principal
      */
     public Archivo(String nombre, int bloquesReservados, String usuarioPropietario, String rutaCompleta) {
         this.nombre = nombre;
         this.bloquesReservados = bloquesReservados;
-        this.tamañoReservadoBytes = bloquesReservados * 1024; // Asumimos 1024 bytes por bloque
+        this.tamañoReservadoBytes = bloquesReservados * 1024; // 1024 bytes por bloque
         
-        // Inicialmente el archivo está vacío de contenido
         this.tamañoBytes = 0;
         this.tamañoBloques = 0; 
         
@@ -63,10 +65,16 @@ public class Archivo {
         } else {
             this.extension = "txt";
         }
+        
+        // Generar un color aleatorio brillante para este archivo
+        float r = (float) Math.random();
+        float g = (float) Math.random();
+        float b = (float) Math.random();
+        this.color = new Color(r, g, b).brighter(); 
     }
     
     /**
-     * Constructor simplificado (compatibilidad)
+     * Constructor simplificado
      */
     public Archivo(String nombre, int bloquesReservados, String usuarioPropietario) {
         this(nombre, bloquesReservados, usuarioPropietario, "/" + nombre);
@@ -74,15 +82,10 @@ public class Archivo {
     
     // ===== OPERACIONES DE CONTENIDO =====
     
-    /**
-     * Escribe contenido en el archivo y recalcula su tamaño real
-     */
     public boolean escribirContenido(String nuevoContenido) {
         this.contenido = nuevoContenido;
-        this.tamañoBytes = nuevoContenido.length(); // 1 char = 1 byte aprox para simulación
+        this.tamañoBytes = nuevoContenido.length();
         
-        // Calcular cuántos bloques ocupa realmente este contenido
-        // Math.ceil(bytes / 1024)
         if (this.tamañoBytes == 0) {
             this.tamañoBloques = 0;
         } else {
@@ -97,7 +100,7 @@ public class Archivo {
         return contenido;
     }
     
-    // ===== GESTIÓN DE BLOQUES (LO QUE FALTABA) =====
+    // ===== GESTIÓN DE BLOQUES =====
     
     public Bloque getPrimerBloque() {
         return primerBloque;
@@ -107,10 +110,6 @@ public class Archivo {
         this.primerBloque = primerBloque;
     }
     
-    /**
-     * Recorre la lista enlazada para generar un String (ej: "0 -> 5 -> 2")
-     * Usado por el PanelOutput y ManejadorArchivo
-     */
     public String getInfoBloques() {
         if (primerBloque == null) {
             return "Sin bloques asignados";
@@ -120,7 +119,7 @@ public class Archivo {
         Bloque actual = primerBloque;
         int contador = 0;
         
-        while (actual != null && contador < 50) { // Límite por seguridad
+        while (actual != null && contador < 50) {
             sb.append(actual.getIdBloque());
             if (actual.getSiguienteBloque() != null) {
                 sb.append(" -> ");
@@ -135,35 +134,9 @@ public class Archivo {
         
         return sb.toString();
     }
-
-    // ===== GETTERS Y SETTERS =====
-
-    public String getNombre() { return nombre; }
-    public void setNombre(String nombre) { this.nombre = nombre; }
-
-    public int getTamañoBytes() { return tamañoBytes; } // Tamaño REAL
-    public int getTamañoBloques() { return tamañoBloques; } // Bloques USADOS
-
-    public int getBloquesReservados() { return bloquesReservados; } // Bloques TOTALES ASIGNADOS
-    public int getTamañoReservadoBytes() { return tamañoReservadoBytes; }
-
-    public String getUsuarioPropietario() { return usuarioPropietario; }
-    // Alias para compatibilidad con código viejo que use getPropietario
-    public String getPropietario() { return usuarioPropietario; }
     
-    public String getRutaCompleta() { return rutaCompleta; }
-    public void setRutaCompleta(String ruta) { this.rutaCompleta = ruta; }
-
-    public String getRutaReal() { return rutaReal; }
-    public void setRutaReal(String rutaReal) { this.rutaReal = rutaReal; }
-
-    public boolean esPublico() { return esPublico; }
-    public void setEsPublico(boolean esPublico) { this.esPublico = esPublico; }
-    
-    public String getFechaCreacion() { return fechaCreacion; }
-
     /**
-     * Obtiene información detallada del archivo (Requerido por TestFIFO)
+     * Obtiene información detallada del archivo (Para PanelOutput y Debug)
      */
     public String getInfoCompleta() {
         return String.format(
@@ -183,6 +156,37 @@ public class Archivo {
             getInfoBloques()
         );
     }
+
+    // ===== GETTERS Y SETTERS =====
+
+    public String getNombre() { return nombre; }
+    public void setNombre(String nombre) { this.nombre = nombre; }
+
+    public int getTamañoBytes() { return tamañoBytes; }
+    public int getTamañoBloques() { return tamañoBloques; }
+
+    public int getBloquesReservados() { return bloquesReservados; }
+    public int getTamañoReservadoBytes() { return tamañoReservadoBytes; }
+
+    public String getUsuarioPropietario() { return usuarioPropietario; }
+    public String getPropietario() { return usuarioPropietario; }
+    
+    public String getRutaCompleta() { return rutaCompleta; }
+    public void setRutaCompleta(String ruta) { this.rutaCompleta = ruta; }
+
+    public String getRutaReal() { return rutaReal; }
+    public void setRutaReal(String rutaReal) { this.rutaReal = rutaReal; }
+
+    public boolean esPublico() { return esPublico; }
+    public void setEsPublico(boolean esPublico) { this.esPublico = esPublico; }
+    
+    public String getFechaCreacion() { return fechaCreacion; }
+    
+    // Getter para el color visual en el disco
+    public Color getColor() {
+        return color;
+    }
+
     @Override
     public String toString() {
         return nombre + " (" + tamañoBloques + "/" + bloquesReservados + " blqs)";

@@ -4,19 +4,21 @@
  */
 package Models;
 
+import java.awt.Color; // <-- IMPORTANTE: Necesario para los colores
+
 /**
  * Clase que representa un bloque de almacenamiento en el disco simulado
- * Cada bloque puede estar ocupado por un archivo o libre
- * Implementa la asignación encadenada mediante referencia al siguiente bloque
  */
-
 public class Bloque {
     private int idBloque;
     private boolean estaOcupado;
-    private String ocupadoPor; // Nombre del archivo que ocupa este bloque
-    private Bloque siguienteBloque;   // Referencia al siguiente bloque en la cadena
-    private int idProcesoDueño;  // ID del proceso que creó el archivo
-    private String datos;       // Datos simulados almacenados en el bloque
+    private String ocupadoPor; 
+    private Bloque siguienteBloque;   
+    private int idProcesoDueño;  
+    private String datos;       
+    
+    // Variable para guardar el color visual del archivo
+    private Color color; 
 
     // Constructor principal
     public Bloque(int idBloque, boolean estaOcupado, String ocupadoPor, Bloque siguienteBloque) {
@@ -24,8 +26,9 @@ public class Bloque {
         this.estaOcupado = estaOcupado;
         this.ocupadoPor = ocupadoPor;
         this.siguienteBloque = siguienteBloque;
-        this.idProcesoDueño = -1; // -1 indica que no tiene dueño
-        this.datos = ""; // Datos vacíos por defecto
+        this.idProcesoDueño = -1; 
+        this.datos = ""; 
+        this.color = Color.GREEN.darker(); // Por defecto verde (libre)
     }
 
     // Constructor simplificado
@@ -83,17 +86,23 @@ public class Bloque {
     }
 
     /**
-     * Ocupa el bloque con un archivo y proceso específico
+     * Ocupa el bloque con un archivo, proceso y COLOR específico
      */
-    public void ocuparBloque(String nombreArchivo, int idProceso) {
+    public void ocuparBloque(String nombreArchivo, int idProceso, Color colorArchivo) {
         this.estaOcupado = true;
         this.ocupadoPor = nombreArchivo;
         this.idProcesoDueño = idProceso;
+        this.color = colorArchivo; // <-- Guardamos el color
         this.datos = "Datos del archivo: " + nombreArchivo;
+    }
+    
+    // Sobrecarga para compatibilidad (por si acaso)
+    public void ocuparBloque(String nombreArchivo, int idProceso) {
+        ocuparBloque(nombreArchivo, idProceso, Color.RED.darker()); // Color por defecto rojo
     }
 
     /**
-     * Libera el bloque, dejándolo disponible
+     * Libera el bloque, dejándolo disponible y VERDE
      */
     public void liberarBloque() {
         this.estaOcupado = false;
@@ -101,6 +110,7 @@ public class Bloque {
         this.idProcesoDueño = -1;
         this.siguienteBloque = null;
         this.datos = "";
+        this.color = Color.GREEN.darker(); // <-- Resetear a verde
     }
 
     /**
@@ -112,15 +122,17 @@ public class Bloque {
 
     /**
      * Obtiene el ID del siguiente bloque en la cadena
-     * Retorna -1 si no hay siguiente bloque
      */
     public int getIdSiguienteBloque() {
         return (siguienteBloque != null) ? siguienteBloque.getIdBloque() : -1;
     }
+    
+    // Getter del color (¡ESTO ES LO QUE FALTABA!)
+    public Color getColor() {
+        // Si por alguna razón es null, devolver verde
+        return (color == null) ? Color.GREEN.darker() : color;
+    }
 
-    /**
-     * Representación en String del bloque para debugging
-     */
     @Override
     public String toString() {
         String estado = estaOcupado ? "OCUPADO" : "LIBRE";
@@ -130,26 +142,19 @@ public class Bloque {
         return String.format("Bloque %d [%s%s]%s", idBloque, estado, infoDueño, infoSiguiente);
     }
 
-    /**
-     * Representación corta para la interfaz gráfica
-     */
     public String aStringCorto() {
         if (!estaOcupado) {
-            return "L"; // Libre
+            return "L"; 
         }
-        // Ocupado: mostrar inicial del archivo o ID
         return ocupadoPor != null && !ocupadoPor.isEmpty() ? 
                String.valueOf(ocupadoPor.charAt(0)).toUpperCase() : "O";
     }
 
-    /**
-     * Crea una copia profunda del bloque (útil para operaciones de buffer)
-     */
     public Bloque copiaProfunda() {
         Bloque copia = new Bloque(this.idBloque, this.estaOcupado, this.ocupadoPor, null);
         copia.setIdProcesoDueño(this.idProcesoDueño);
         copia.setDatos(this.datos);
-        // Nota: siguienteBloque no se copia para evitar ciclos infinitos
+        copia.color = this.color; // Copiar color también
         return copia;
     }
 }
