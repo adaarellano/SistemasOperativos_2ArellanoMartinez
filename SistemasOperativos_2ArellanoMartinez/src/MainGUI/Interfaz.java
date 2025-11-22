@@ -99,7 +99,7 @@ public class Interfaz extends JFrame {
     }
     
 private JSplitPane crearPanelCentral() {
-        // === PANEL IZQUIERDO (Archivos + Disco) ===
+        // === PANEL IZQUIERDO (Archivos + Disco + Botones) ===
         JPanel panelIzquierdo = new JPanel(new BorderLayout());
 
         // 1. Panel de Archivos (JTree)
@@ -110,10 +110,10 @@ private JSplitPane crearPanelCentral() {
         panelDisco = new PanelDisco(manejador); 
         manejador.setPanelDisco(panelDisco);
 
-        // Usamos un JSplitPane vertical para el lado izquierdo
+        // Usamos un JSplitPane vertical para dividir Árbol (arriba) y Disco (abajo)
         JSplitPane splitIzquierdo = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
                                                  panelArchivos, panelDisco);
-        splitIzquierdo.setDividerLocation(400); // Ajusta el tamaño del árbol
+        splitIzquierdo.setDividerLocation(400); // Altura del árbol
         panelIzquierdo.add(splitIzquierdo, BorderLayout.CENTER);
 
         // === PANEL DERECHO (Con Pestañas) ===
@@ -124,44 +124,50 @@ private JSplitPane crearPanelCentral() {
         manejador.setPanelConsola(panelConsola);
         panelDerecho.addTab("Consola", panelConsola);
 
-        // Pestaña 2: Gestor de Procesos (NUEVO)
+        // Pestaña 2: Gestor de Procesos
         panelProcesos = new PanelProcesos(manejador);
         panelDerecho.addTab("Gestor de Procesos", panelProcesos);
 
-        // Pestaña 3: Tabla de Asignación
+        // Pestaña 3: Tabla de Asignación (FAT)
         panelTablaAsignacion = new PanelTablaAsignacion(manejador);
         manejador.setPanelTablaAsignacion(panelTablaAsignacion);
         panelDerecho.addTab("Tabla de Asignación", panelTablaAsignacion);
 
-        // Pestaña 4: Detalles (Bytes)
+        // Pestaña 4: Detalles Técnicos (Bytes)
         PanelOutput panelOutput = new PanelOutput();
         manejador.setPanelOutput(panelOutput);
         panelDerecho.addTab("Detalles (Bytes)", panelOutput);
-
-        // === PANEL DE CONTROL (Oculto inicialmente) ===
-        panelControl = new PanelControl(manejador, panelArchivos, panelConsola, panelOutput, panelDisco, panelTablaAsignacion);
-        panelControl.setVisible(false);
         
-        // Agregamos el panel de control en la parte superior del panel izquierdo
+        // Pestaña 5: Estadísticas (Gráfica JFreeChart)
+        PanelEstadisticas panelEstadisticas = new PanelEstadisticas(manejador);
+        manejador.setPanelEstadisticas(panelEstadisticas);
+        panelDerecho.addTab("Estadísticas", panelEstadisticas);
+
+        // === PANEL DE CONTROL (Botones) ===
+        // Se instancia con todas las dependencias para poder actualizar todo
+        panelControl = new PanelControl(manejador, panelArchivos, panelConsola, panelOutput, panelDisco, panelTablaAsignacion);
+        panelControl.setVisible(false); // Inicia oculto (Modo Usuario)
+        
+        // Agregamos el panel de control en la parte SUPERIOR del lado izquierdo
         panelIzquierdo.add(panelControl, BorderLayout.NORTH);
         
-        // === CONEXIÓN DE EVENTOS (¡LA PARTE CLAVE!) ===
+        // === CONEXIÓN DE EVENTOS (IMPORTANTE) ===
         // Esto conecta el clic en el árbol con el panel de detalles automáticamente
         panelArchivos.agregarListenerSeleccion(e -> {
             Object obj = panelArchivos.getObjetoSeleccionado();
             
-            if (obj instanceof Archivo) {
-                // Si es archivo, mostramos su ficha técnica
-                panelOutput.mostrarFichaTecnica((Archivo) obj);
+            if (obj instanceof Models.Archivo) {
+                // Si es archivo, mostramos su ficha técnica en la pestaña de detalles
+                panelOutput.mostrarFichaTecnica((Models.Archivo) obj);
             } else {
                 panelOutput.mostrarMensajeVacio();
             }
         });
         
         // === SPLIT PRINCIPAL ===
-        // (Ahora divide el panelIzquierdo y el panelDerecho)
+        // Divide la pantalla en Izquierda (Gestión) y Derecha (Info)
         JSplitPane splitPrincipal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, panelIzquierdo, panelDerecho);
-        splitPrincipal.setDividerLocation(500);
+        splitPrincipal.setDividerLocation(500); // Ancho del panel izquierdo
         
         return splitPrincipal;
     }

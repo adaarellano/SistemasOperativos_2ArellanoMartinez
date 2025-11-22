@@ -56,6 +56,7 @@ public class ManejadorArchivo {
     private PanelDisco panelDisco; 
     private PanelTablaAsignacion panelTablaAsignacion; 
     private PanelDetalles panelDetalles; 
+    private PanelEstadisticas panelEstadisticas; // <-- AÑADIR
     private BufferManager bufferManager;
     
     public ManejadorArchivo() {
@@ -789,6 +790,10 @@ public class ManejadorArchivo {
      public void setPanelOutput(PanelOutput panelOutput) {
         this.panelOutput = panelOutput;
     }
+     
+     public void setPanelEstadisticas(PanelEstadisticas panel) {
+    this.panelEstadisticas = panel;
+    }
     
     public int getArchivosCreados() {
         return archivosCreados;
@@ -816,6 +821,7 @@ public class ManejadorArchivo {
         if (panelDisco != null) panelDisco.actualizarDisco();
         if (panelTablaAsignacion != null) panelTablaAsignacion.actualizarTabla();
         if (panelDetalles != null) panelDetalles.actualizarDetalles();
+        if (panelEstadisticas != null) panelEstadisticas.actualizarGrafica();
     }
     
     public void setPanelArchivos(PanelArchivos panel) {
