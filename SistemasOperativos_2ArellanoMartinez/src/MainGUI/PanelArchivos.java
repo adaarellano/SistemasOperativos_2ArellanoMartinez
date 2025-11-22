@@ -27,14 +27,50 @@ public class PanelArchivos extends JPanel {
         setLayout(new BorderLayout());
         setBorder(BorderFactory.createTitledBorder("Sistema de Archivos"));
         
-        // Crear modelo de árbol
-        DefaultMutableTreeNode raiz = new DefaultMutableTreeNode("Sistema de Archivos");
+        // Nodo raíz temporal
+        DefaultMutableTreeNode raiz = new DefaultMutableTreeNode("Cargando...");
         modeloArbol = new DefaultTreeModel(raiz);
         arbolArchivos = new JTree(modeloArbol);
         
-        // Configurar el árbol para permitir selección simple
+        // Configuración básica
         arbolArchivos.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         arbolArchivos.setShowsRootHandles(true);
+        
+        // === RENDERIZADOR ===
+        arbolArchivos.setCellRenderer(new DefaultTreeCellRenderer() {
+            @Override
+            public Component getTreeCellRendererComponent(JTree tree, Object value, 
+                    boolean sel, boolean expanded, boolean leaf, int row, boolean hasFocus) {
+                
+                super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
+                
+                DefaultMutableTreeNode nodo = (DefaultMutableTreeNode) value;
+                Object userObject = nodo.getUserObject();
+                
+                if (userObject instanceof Directorio) {
+                    Directorio dir = (Directorio) userObject;
+                    // Si es la raíz, mostramos un nombre especial
+                    if (dir.esRaiz()) {
+                        setText("Sistema de Archivos (Raíz)");
+                        setIcon(UIManager.getIcon("FileView.computerIcon"));
+                    } else {
+                        String textoVisual = dir.getNombre() + " (" + 
+                                           dir.getArchivos().getSize() + " archivos, " + 
+                                           dir.getSubdirectorios().getSize() + " dirs)";
+                        setText(textoVisual);
+                        setIcon(UIManager.getIcon("FileView.directoryIcon"));
+                    }
+                } else if (userObject instanceof Archivo) {
+                    Archivo arch = (Archivo) userObject;
+                    String textoVisual = arch.getNombre() + " (" + 
+                                       arch.getTamañoBloques() + "/" + 
+                                       arch.getBloquesReservados() + " blqs)";
+                    setText(textoVisual);
+                    setIcon(UIManager.getIcon("FileView.fileIcon"));
+                }
+                return this;
+            }
+        });
         
         add(new JScrollPane(arbolArchivos), BorderLayout.CENTER);
     }
@@ -44,70 +80,109 @@ public class PanelArchivos extends JPanel {
     }
     
     public void actualizarArbol() {
-        // Envolver en invokeLater asegura que la actualización visual
-        // ocurra en el hilo correcto
         SwingUtilities.invokeLater(() -> {
-            DefaultMutableTreeNode raiz = new DefaultMutableTreeNode("Sistema de Archivos");
-            
-            // Agregar directorio raíz
             if (manejador != null && manejador.getRaiz() != null) {
-                agregarDirectorioAlArbol(manejador.getRaiz(), raiz);
-            }
-            
-            modeloArbol.setRoot(raiz);
-            modeloArbol.reload();
-            
-            // Expandir todo para ver los archivos
-            for (int i = 0; i < arbolArchivos.getRowCount(); i++) {
-                arbolArchivos.expandRow(i);
+                // 1. La raíz del árbol AHORA contiene el objeto Directorio Raíz real
+                DefaultMutableTreeNode nodoRaiz = new DefaultMutableTreeNode(manejador.getRaiz());
+                
+                // 2. Llenamos el árbol
+                agregarDirectorioAlArbol(manejador.getRaiz(), nodoRaiz);
+                
+                modeloArbol.setRoot(nodoRaiz);
+                modeloArbol.reload();
+                
+                // 3. Expandir todo
+                for (int i = 0; i < arbolArchivos.getRowCount(); i++) {
+                    arbolArchivos.expandRow(i);
+                }
             }
         });
     }
     
     private void agregarDirectorioAlArbol(Directorio directorio, DefaultMutableTreeNode nodoPadre) {
-        // Formato: Nombre (X archivos, Y directorios)
-        String textoNodo = directorio.getNombre() + " (" + 
-                          directorio.getArchivos().getSize() + " archivos, " +
-                          directorio.getSubdirectorios().getSize() + " directorios)";
-        
-        DefaultMutableTreeNode nodoDirectorio = new DefaultMutableTreeNode(textoNodo);
-        nodoPadre.add(nodoDirectorio);
-        
-        // Agregar subdirectorios recursivamente
-        ListaSimple subdirectorios = directorio.getSubdirectorios();
-        for (int i = 0; i < subdirectorios.getSize(); i++) {
-            Directorio subdir = (Directorio) subdirectorios.get(i);
-            agregarDirectorioAlArbol(subdir, nodoDirectorio);
+        // Agregar subdirectorios
+        ListaSimple subdirs = directorio.getSubdirectorios();
+        for (int i = 0; i < subdirs.getSize(); i++) {
+            Directorio subdir = (Directorio) subdirs.get(i);
+            // Guardamos el OBJETO Directorio
+            DefaultMutableTreeNode nodoSubdir = new DefaultMutableTreeNode(subdir);
+            nodoPadre.add(nodoSubdir);
+            
+            // Recursividad: Llenar este subdirectorio
+            agregarDirectorioAlArbol(subdir, nodoSubdir);
         }
         
         // Agregar archivos
         ListaSimple archivos = directorio.getArchivos();
         for (int i = 0; i < archivos.getSize(); i++) {
             Archivo archivo = (Archivo) archivos.get(i);
-            // Formato: Nombre (X/Y bloques)
-            String textoArchivo = archivo.getNombre() + " (" + 
-                                archivo.getTamañoBloques() + "/" + 
-                                archivo.getBloquesReservados() + " bloques)";
-            nodoDirectorio.add(new DefaultMutableTreeNode(textoArchivo));
+            // Guardamos el OBJETO Archivo
+            DefaultMutableTreeNode nodoArchivo = new DefaultMutableTreeNode(archivo);
+            nodoPadre.add(nodoArchivo);
         }
     }
     
     /**
-     * Método robusto para obtener el texto del nodo seleccionado.
+     * Obtiene la ruta exacta preguntándole directamente al objeto seleccionado.
+     * ¡Esta es la corrección clave!
      */
-    public String getArchivoSeleccionado() {
-        // Forma segura de obtener la selección
+    public String obtenerRutaSeleccionada() {
         DefaultMutableTreeNode nodo = (DefaultMutableTreeNode) arbolArchivos.getLastSelectedPathComponent();
         
-        if (nodo == null) {
-            return null; // Nada seleccionado
+        // Si no hay nada seleccionado, devolvemos la raíz "/"
+        if (nodo == null) return "/";
+        
+        Object obj = nodo.getUserObject();
+        
+        if (obj instanceof Directorio) {
+            // Si seleccionaste una carpeta, devolvemos su ruta exacta
+            return ((Directorio) obj).getRutaCompleta();
+        } else if (obj instanceof Archivo) {
+            // Si seleccionaste un archivo, devolvemos la ruta de SU CARPETA PADRE
+            // (Para crear algo "al lado" de este archivo)
+            String rutaArchivo = ((Archivo) obj).getRutaCompleta();
+            // Cortamos el nombre del archivo para obtener la carpeta
+            int ultimoSlash = rutaArchivo.lastIndexOf('/');
+            if (ultimoSlash == 0) return "/"; // Está en la raíz
+            return rutaArchivo.substring(0, ultimoSlash);
         }
         
-        if (nodo.isRoot()) {
-            return null; // No dejar seleccionar la raíz
-        }
+        return "/";
+    }
+    
+    /**
+     * Devuelve true si lo seleccionado es un Directorio, false si es Archivo o nada.
+     */
+    public boolean esDirectorioSeleccionado() {
+        DefaultMutableTreeNode nodo = (DefaultMutableTreeNode) arbolArchivos.getLastSelectedPathComponent();
+        if (nodo == null) return false;
         
-        // Retorna el texto (UserObject)
-        return nodo.toString();
+        Object obj = nodo.getUserObject();
+        return (obj instanceof Directorio);
+    }
+    
+    // Método para permitir que la Interfaz escuche clics en el árbol
+    public void agregarListenerSeleccion(javax.swing.event.TreeSelectionListener listener) {
+        arbolArchivos.addTreeSelectionListener(listener);
+    }
+
+    // Método para obtener el OBJETO real (Archivo o Directorio) seleccionado
+    public Object getObjetoSeleccionado() {
+        DefaultMutableTreeNode nodo = (DefaultMutableTreeNode) arbolArchivos.getLastSelectedPathComponent();
+        if (nodo == null) return null;
+        return nodo.getUserObject();
+    }
+    
+    public String getArchivoSeleccionado() {
+        DefaultMutableTreeNode nodo = (DefaultMutableTreeNode) arbolArchivos.getLastSelectedPathComponent();
+        if (nodo == null) return null;
+        
+        Object obj = nodo.getUserObject();
+        if (obj instanceof Archivo) {
+            return ((Archivo) obj).getNombre();
+        } else if (obj instanceof Directorio) {
+            return ((Directorio) obj).getNombre();
+        }
+        return null;
     }
 }

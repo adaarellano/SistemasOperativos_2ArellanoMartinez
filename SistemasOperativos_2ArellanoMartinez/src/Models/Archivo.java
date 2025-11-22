@@ -19,7 +19,7 @@ public class Archivo {
     
     private String usuarioPropietario; // Compatibilidad con nombre de variable en Manejador
     private String permisos;
-    private String fechaCreacion;
+    public String fechaCreacion;
     private long fechaModificacionLong; // Para ordenamientos
     private String contenido;
     private String rutaCompleta;

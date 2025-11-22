@@ -125,12 +125,28 @@ public class Directorio {
     }
     
     /**
-     * Elimina un subdirectorio y todo su contenido
+     * Elimina un subdirectorio y todo su contenido por nombre
      */
     public boolean eliminarSubdirectorio(String nombreSubdirectorio) {
         for (int i = 0; i < subdirectorios.getSize(); i++) {
             Directorio subdir = (Directorio) subdirectorios.get(i);
             if (subdir.getNombre().equals(nombreSubdirectorio)) {
+                Object elemento = subdirectorios.get(i);
+                subdirectorios.remove(elemento);
+                actualizarFechaModificacion();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Elimina un subdirectorio específico por referencia de objeto
+     */
+    public boolean eliminarSubdirectorio(Directorio subdirectorio) {
+        for (int i = 0; i < subdirectorios.getSize(); i++) {
+            Directorio subdir = (Directorio) subdirectorios.get(i);
+            if (subdir == subdirectorio) {
                 Object elemento = subdirectorios.get(i);
                 subdirectorios.remove(elemento);
                 actualizarFechaModificacion();
@@ -193,19 +209,33 @@ public class Directorio {
     }
     
     private Directorio buscarDirectorioRecursivo(String[] partes, int indice) {
-        if (indice >= partes.length || partes[indice].isEmpty()) {
+        // Caso base: Si nos pasamos del arreglo, devolvemos este directorio
+        if (indice >= partes.length) {
             return this;
         }
         
+        // CORRECCIÓN: Si la parte actual está vacía (por ejemplo, por un "//" o al inicio),
+        // simplemente la saltamos y seguimos buscando en el siguiente índice.
+        if (partes[indice].isEmpty()) {
+            return buscarDirectorioRecursivo(partes, indice + 1);
+        }
+        
         String nombreBuscado = partes[indice];
+        
+        // Buscamos en los subdirectorios
         for (int i = 0; i < subdirectorios.getSize(); i++) {
             Directorio subdir = (Directorio) subdirectorios.get(i);
             if (subdir.getNombre().equals(nombreBuscado)) {
+                // Si es el último elemento de la ruta, hemos llegado
+                if (indice == partes.length - 1) {
+                    return subdir;
+                }
+                // Si faltan más partes, seguimos bajando
                 return subdir.buscarDirectorioRecursivo(partes, indice + 1);
             }
         }
         
-        return null;
+        return null; // No encontrado
     }
     
     // ===== OPERACIONES DE NAVEGACIÓN =====
@@ -367,18 +397,4 @@ public class Directorio {
         
         return sb.toString();
     }
-    
-    public boolean eliminarSubdirectorio(Directorio subdirectorio) {
-    for (int i = 0; i < subdirectorios.getSize(); i++) {
-        Directorio subdir = (Directorio) subdirectorios.get(i);
-        if (subdir == subdirectorio) {
-            Object elemento = subdirectorios.get(i);
-            subdirectorios.remove(elemento);
-            actualizarFechaModificacion();
-            return true;
-        }
-    }
-    return false;
-}
-    
 }

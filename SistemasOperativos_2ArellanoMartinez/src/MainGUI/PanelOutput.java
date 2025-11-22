@@ -43,6 +43,57 @@ public class PanelOutput extends JPanel {
         });
     }
     
+    /**
+     * Muestra la "Ficha Técnica" de un archivo seleccionado.
+     * Calcula fragmentación y muestra la ruta física.
+     */
+    public void mostrarFichaTecnica(Models.Archivo archivo) {
+        SwingUtilities.invokeLater(() -> {
+            areaTexto.setText(""); // Limpiar pantalla anterior
+            
+            StringBuilder sb = new StringBuilder();
+            sb.append("============================================\n");
+            sb.append("       FICHA TÉCNICA DEL ARCHIVO\n");
+            sb.append("============================================\n\n");
+            
+            sb.append("📄 NOMBRE:      ").append(archivo.getNombre()).append("\n");
+            sb.append("📂 RUTA:        ").append(archivo.getRutaCompleta()).append("\n");
+            sb.append("👤 PROPIETARIO: ").append(archivo.getUsuarioPropietario()).append("\n");
+            sb.append("📅 CREADO:      ").append(archivo.getFechaCreacion()).append("\n\n");
+            
+            sb.append("--- ALMACENAMIENTO (LÓGICO) ---\n");
+            sb.append("Tamaño de datos:   ").append(archivo.getTamañoBytes()).append(" bytes\n");
+            sb.append("Contenido:         \"").append(archivo.leerContenido()).append("\"\n\n");
+            
+            sb.append("--- ALMACENAMIENTO (FÍSICO) ---\n");
+            sb.append("Bloques reservados: ").append(archivo.getBloquesReservados()).append("\n");
+            sb.append("Espacio total:      ").append(archivo.getTamañoReservadoBytes()).append(" bytes\n");
+            
+            // CÁLCULO DE FRAGMENTACIÓN (Desperdicio)
+            int desperdicio = archivo.getTamañoReservadoBytes() - archivo.getTamañoBytes();
+            double porcentajeDesperdicio = 0;
+            if (archivo.getTamañoReservadoBytes() > 0) {
+                porcentajeDesperdicio = (desperdicio * 100.0) / archivo.getTamañoReservadoBytes();
+            }
+            
+            sb.append("Espacio desperdiciado: ").append(desperdicio).append(" bytes (")
+              .append(String.format("%.2f", porcentajeDesperdicio)).append("%)\n");
+            sb.append("Estado: ").append(desperdicio == 0 ? "OPTIMIZADO" : "FRAGMENTACIÓN INTERNA").append("\n\n");
+            
+            sb.append("--- MAPA DE BLOQUES ---\n");
+            sb.append(archivo.getInfoBloques()).append("\n");
+            
+            areaTexto.setText(sb.toString());
+            areaTexto.setCaretPosition(0); // Ir al inicio
+        });
+    }
+    
+    public void mostrarMensajeVacio() {
+        SwingUtilities.invokeLater(() -> {
+            areaTexto.setText("\n\n   Seleccione un archivo en el árbol\n   para ver sus detalles técnicos.");
+        });
+    }
+    
     public void limpiar() {
         SwingUtilities.invokeLater(() -> {
             areaTexto.setText("");

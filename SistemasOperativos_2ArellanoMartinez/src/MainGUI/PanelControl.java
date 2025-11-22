@@ -71,18 +71,26 @@ public class PanelControl extends JPanel {
         });
     }
     
-    private void crearArchivo() {
-        String nombre = JOptionPane.showInputDialog(this, "Nombre del archivo (ej: notas.txt):");
+private void crearArchivo() {
+        // 1. Obtener la ruta seleccionada del árbol
+        String rutaBase = panelArchivos.obtenerRutaSeleccionada();
+        
+        // 2. Mostrar la ruta en el mensaje para que sepas dónde estás creando
+        String nombre = JOptionPane.showInputDialog(this, 
+            "Crear archivo en '" + rutaBase + "':\nNombre del archivo:");
+            
         if (nombre != null && !nombre.trim().isEmpty()) {
             String tamanoStr = JOptionPane.showInputDialog(this, "Tamaño en bloques:");
             try {
                 int tamano = Integer.parseInt(tamanoStr);
                 
-                // Crear ruta (por ahora en la raíz)
-                String ruta = "/" + nombre;
+                // 3. Construir la ruta correcta
+                // Si la base es "/", la ruta es "/nombre"
+                // Si la base es "/arellano", la ruta es "/arellano/nombre"
+                String rutaCompleta = rutaBase.equals("/") ? "/" + nombre : rutaBase + "/" + nombre;
                 
-                // Solicitamos el PROCESO al manejador
-                manejador.solicitarOperacion("CREAR", ruta, "admin", tamano);
+                // 4. Enviar la solicitud con la ruta completa
+                manejador.solicitarOperacion("CREAR", rutaCompleta, "admin", tamano);
 
                 panelConsola.agregarLinea("Solicitud de PROCESO 'CREAR' enviada para: " + nombre);
             } catch (NumberFormatException ex) {
@@ -91,46 +99,90 @@ public class PanelControl extends JPanel {
         }
     }
     
-    // NUEVO MÉTODO: Crear Directorio
-    private void crearDirectorio() {
-        String nombre = JOptionPane.showInputDialog(this, "Nombre del Directorio:");
-        if (nombre != null && !nombre.trim().isEmpty()) {
-            String ruta = "/" + nombre;
+private void crearDirectorio() {
+        String rutaBase = panelArchivos.obtenerRutaSeleccionada();
+        
+        String nombre = JOptionPane.showInputDialog(this, 
+            "Crear directorio en '" + rutaBase + "':\nNombre:");
             
-            // Solicitamos el proceso. Tamaño 0 porque los directorios 
-            // en esta simulación son lógicos (no ocupan bloques físicos del SD).
-            manejador.solicitarOperacion("CREAR_DIR", ruta, "admin", 0);
+        if (nombre != null && !nombre.trim().isEmpty()) {
+            String rutaCompleta = rutaBase.equals("/") ? "/" + nombre : rutaBase + "/" + nombre;
+            
+            manejador.solicitarOperacion("CREAR_DIR", rutaCompleta, "admin", 0);
             
             panelConsola.agregarLinea("Solicitud 'CREAR_DIR' enviada para: " + nombre);
         }
     }
     
     private void editarArchivo() {
-        String archivoSeleccionado = panelArchivos.getArchivoSeleccionado();
-        if (archivoSeleccionado != null && archivoSeleccionado.contains("(")) {
-            // Extraer nombre del archivo (parte antes del paréntesis)
-            String nombreArchivo = archivoSeleccionado.split("\\(")[0].trim();
+
+        // 1. Obtener nombre limpio
+        String nombreSeleccionado = panelArchivos.getArchivoSeleccionado();
+        
+        if (nombreSeleccionado == null) {
+            JOptionPane.showMessageDialog(this, "Seleccione un archivo o directorio del árbol primero.");
+            return;
+        }
+        
+        // 2. Obtener la ruta completa
+        String rutaCompleta = panelArchivos.obtenerRutaSeleccionada();
+        
+        // CASO A: Es un DIRECTORIO -> Renombrar
+        if (panelArchivos.esDirectorioSeleccionado()) {
+            String nuevoNombre = JOptionPane.showInputDialog(this, 
+                "Renombrar directorio '" + nombreSeleccionado + "':", 
+                nombreSeleccionado);
+                
+            if (nuevoNombre != null && !nuevoNombre.trim().isEmpty()) {
+                manejador.renombrarDirectorio(rutaCompleta, nuevoNombre, "admin");
+            }
+        } 
+        // CASO B: Es un ARCHIVO -> Editar Contenido (ESTILO NOTEPAD)
+        else {
+            // Reconstruimos la ruta del archivo
+            String rutaArchivo;
+            if (rutaCompleta.equals("/")) {
+                rutaArchivo = "/" + nombreSeleccionado;
+            } else {
+                rutaArchivo = rutaCompleta + "/" + nombreSeleccionado;
+            }
             
-            String nuevoContenido = JOptionPane.showInputDialog(this, 
-                "Nuevo contenido para " + nombreArchivo + ":", 
-                "Editar Archivo", 
+            // 1. Leer contenido actual
+            String contenidoActual = manejador.leerArchivo(rutaArchivo, "admin");
+            if (contenidoActual == null) contenidoActual = ""; 
+            
+            // --- AQUÍ ESTÁ EL CAMBIO PARA HACERLO GRANDE ---
+            
+            // Creamos un Área de Texto de 15 filas x 50 columnas
+            JTextArea textArea = new JTextArea(15, 50); 
+            textArea.setText(contenidoActual);
+            textArea.setLineWrap(true);       // Que el texto baje automáticamente
+            textArea.setWrapStyleWord(true);  // Que no corte palabras a la mitad
+            
+            // Le ponemos barras de desplazamiento (scroll)
+            JScrollPane scrollPane = new JScrollPane(textArea);
+            
+            // Mostramos el diálogo con nuestro componente personalizado
+            int result = JOptionPane.showConfirmDialog(this, 
+                scrollPane, 
+                "Editando: " + nombreSeleccionado, 
+                JOptionPane.OK_CANCEL_OPTION, 
                 JOptionPane.PLAIN_MESSAGE);
             
-            if (nuevoContenido != null) {
-                String ruta = "/" + nombreArchivo;
+            // 2. Si le dio OK, guardamos
+            if (result == JOptionPane.OK_OPTION) {
+                String nuevoContenido = textArea.getText();
                 
-                // Solución temporal: Llamada directa para editar contenido
-                // Idealmente esto también sería un proceso "WRITE"
-                boolean exito = manejador.actualizarArchivo(ruta, nuevoContenido, "admin");
+                if (!nuevoContenido.equals(contenidoActual)) {
+                    boolean exito = manejador.actualizarArchivo(rutaArchivo, nuevoContenido, "admin");
 
-                if (exito) {
-                    panelConsola.agregarLinea("Archivo editado: " + nombreArchivo);
-                } else {
-                    panelConsola.agregarLinea("ERROR: No se pudo editar el archivo");
+                    if (exito) {
+                        panelConsola.agregarLinea("Archivo editado: " + nombreSeleccionado);
+                    } else {
+                        panelConsola.agregarLinea("ERROR: No se pudo editar el archivo");
+                    }
                 }
             }
-        } else {
-            JOptionPane.showMessageDialog(this, "Seleccione un archivo del árbol primero.");
         }
     }
     

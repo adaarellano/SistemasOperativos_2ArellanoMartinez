@@ -518,7 +518,7 @@ public class ManejadorArchivo {
         // Simular tiempo de E/S
         try {
             logConsola("   Simulando tiempo de E/S...");
-            Thread.sleep(800); // 800ms de tiempo de acceso
+            Thread.sleep(8000); // 800ms de tiempo de acceso
             
             // --- ¡AQUÍ ESTÁ TU LÓGICA DE BUFFER! ---
             // Si fue una lectura (un CACHE MISS), ahora llenamos el caché.
@@ -870,13 +870,13 @@ public class ManejadorArchivo {
         }
     }
     
-    /**
+  /**
      * Crea un directorio en el sistema.
      * Los directorios son lógicos y no ocupan bloques en esta simulación.
      */
     public boolean crearDirectorio(String ruta, String usuario) {
         logConsola("=== SOLICITANDO CREACIÓN DE DIRECTORIO ===");
-        logConsola("Ruta: " + ruta);
+        logConsola("Ruta objetivo: " + ruta);
         
         if (!verificarPermisosEscritura(usuario)) {
             logConsola("❌ ERROR: Sin permisos");
@@ -884,34 +884,78 @@ public class ManejadorArchivo {
         }
         
         try {
-            // Lógica para encontrar el padre y crear el hijo
-            String[] partes = ruta.split("/");
-            String nombreNuevoDir = partes[partes.length - 1];
-            String rutaPadre = obtenerRutaDirectorio(ruta);
+            // 1. Separar el nombre del nuevo directorio de la ruta de su padre
+            // Ej: "/arellano/fotos" -> Padre: "/arellano", Nuevo: "fotos"
+            String nombreNuevoDir;
+            String rutaPadre;
             
-            logConsola("Directorio Padre: " + rutaPadre);
+            int ultimoSlash = ruta.lastIndexOf('/');
+            if (ultimoSlash == 0) {
+                // Caso especial: Crear en la raíz (ej: "/fotos")
+                rutaPadre = "/";
+                nombreNuevoDir = ruta.substring(1);
+            } else {
+                rutaPadre = ruta.substring(0, ultimoSlash);
+                nombreNuevoDir = ruta.substring(ultimoSlash + 1);
+            }
             
-            Directorio padre = buscarOCrearDirectorio(rutaPadre);
+            logConsola("Buscando Padre: '" + rutaPadre + "' para crear Hijo: '" + nombreNuevoDir + "'");
+            
+            // 2. Buscar DIRECTAMENTE el directorio padre usando la raíz
+            // Usamos el método que ya arreglamos en Directorio.java
+            Directorio padre;
+            if (rutaPadre.equals("/")) {
+                padre = raiz;
+            } else {
+                padre = raiz.buscarDirectorioRecursivo(rutaPadre);
+            }
             
             if (padre != null) {
+                // 3. Crear el subdirectorio
                 Directorio nuevo = padre.crearSubdirectorio(nombreNuevoDir);
                 if (nuevo != null) {
-                    // IMPORTANTE: No incrementamos bloquesOcupados porque es lógico
-                    archivosCreados++; // Opcional: contar directorios en estadísticas
+                    archivosCreados++; // Opcional: contar directorios
                     operacionesRealizadas++;
-                    
-                    logConsola("✅ DIRECTORIO CREADO: " + nombreNuevoDir);
+                    logConsola("✅ DIRECTORIO CREADO: " + nombreNuevoDir + " en " + padre.getNombre());
                     return true;
                 } else {
-                    logConsola("❌ ERROR: El directorio ya existe");
+                    logConsola("❌ ERROR: El directorio '" + nombreNuevoDir + "' ya existe en '" + padre.getNombre() + "'");
                 }
+            } else {
+                logConsola("❌ ERROR: No se encontró el directorio padre: " + rutaPadre);
             }
         } catch (Exception e) {
-            logConsola("❌ ERROR: " + e.getMessage());
+            logConsola("❌ ERROR EXCEPCIÓN: " + e.getMessage());
+            e.printStackTrace();
         }
         return false;
     }
-
+    
+    public boolean renombrarDirectorio(String rutaCompleta, String nuevoNombre, String usuario) {
+        logConsola("=== SOLICITANDO RENOMBRADO DE DIRECTORIO ===");
+        
+        if (!verificarPermisosEscritura(usuario)) {
+            logConsola("❌ ERROR: Sin permisos");
+            return false;
+        }
+        
+        // Buscar el directorio
+        Directorio dir = buscarOCrearDirectorio(rutaCompleta); // Esto busca el existente
+        
+        if (dir != null && !dir.esRaiz()) {
+            String nombreAnterior = dir.getNombre();
+            dir.setNombre(nuevoNombre);
+            
+            operacionesRealizadas++;
+            logConsola("✅ DIRECTORIO RENOMBRADO: " + nombreAnterior + " -> " + nuevoNombre);
+            actualizarGUICompleta(); // Refrescar el árbol
+            return true;
+        }
+        
+        logConsola("❌ ERROR: No se puede renombrar (No encontrado o es Raíz)");
+        return false;
+    }
+    
     /**
      * @return the archivosEliminados
      */

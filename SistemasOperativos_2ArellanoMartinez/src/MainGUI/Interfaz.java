@@ -98,7 +98,7 @@ public class Interfaz extends JFrame {
         return panelSuperior;
     }
     
-    private JSplitPane crearPanelCentral() {
+private JSplitPane crearPanelCentral() {
         // === PANEL IZQUIERDO (Archivos + Disco) ===
         JPanel panelIzquierdo = new JPanel(new BorderLayout());
 
@@ -113,7 +113,7 @@ public class Interfaz extends JFrame {
         // Usamos un JSplitPane vertical para el lado izquierdo
         JSplitPane splitIzquierdo = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
                                                  panelArchivos, panelDisco);
-        splitIzquierdo.setDividerLocation(400); // Dale más espacio al JTree
+        splitIzquierdo.setDividerLocation(400); // Ajusta el tamaño del árbol
         panelIzquierdo.add(splitIzquierdo, BorderLayout.CENTER);
 
         // === PANEL DERECHO (Con Pestañas) ===
@@ -145,6 +145,19 @@ public class Interfaz extends JFrame {
         // Agregamos el panel de control en la parte superior del panel izquierdo
         panelIzquierdo.add(panelControl, BorderLayout.NORTH);
         
+        // === CONEXIÓN DE EVENTOS (¡LA PARTE CLAVE!) ===
+        // Esto conecta el clic en el árbol con el panel de detalles automáticamente
+        panelArchivos.agregarListenerSeleccion(e -> {
+            Object obj = panelArchivos.getObjetoSeleccionado();
+            
+            if (obj instanceof Archivo) {
+                // Si es archivo, mostramos su ficha técnica
+                panelOutput.mostrarFichaTecnica((Archivo) obj);
+            } else {
+                panelOutput.mostrarMensajeVacio();
+            }
+        });
+        
         // === SPLIT PRINCIPAL ===
         // (Ahora divide el panelIzquierdo y el panelDerecho)
         JSplitPane splitPrincipal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, panelIzquierdo, panelDerecho);
@@ -152,7 +165,8 @@ public class Interfaz extends JFrame {
         
         return splitPrincipal;
     }
-    
+
+
     private void configurarEventos() {
         btnModoAdmin.addActionListener(e -> cambiarModo(true));
         btnModoUsuario.addActionListener(e -> cambiarModo(false));

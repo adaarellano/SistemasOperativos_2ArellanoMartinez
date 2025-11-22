@@ -64,32 +64,40 @@ public class PanelTablaAsignacion extends JPanel {
         agregarArchivosDeDirectorio(raiz);
     }
     
-    /**
+  /**
      * Método recursivo para recorrer el árbol de directorios
-     * y añadir los archivos encontrados a la tabla.
+     * y añadir los archivos Y directorios encontrados a la tabla.
      */
     private void agregarArchivosDeDirectorio(Directorio directorio) {
-        // 1. Añadir archivos del directorio actual
+        // 1. Añadir ARCHIVOS del directorio actual
         ListaSimple archivos = directorio.getArchivos();
         for (int i = 0; i < archivos.getSize(); i++) {
             Archivo archivo = (Archivo) archivos.get(i);
             
-            // Preparar los datos para la fila
             String nombre = archivo.getNombre();
             String ruta = archivo.getRutaCompleta();
             String bloques = archivo.getTamañoBloques() + " / " + archivo.getBloquesReservados();
             String primerBloque = (archivo.getPrimerBloque() != null) ? 
                                   String.valueOf(archivo.getPrimerBloque().getIdBloque()) : "N/A";
             
-            // Añadir la fila al modelo
             modeloTabla.addRow(new Object[]{nombre, ruta, bloques, primerBloque});
         }
         
-        // 2. Recorrer subdirectorios
+        // 2. Añadir SUBDIRECTORIOS y recorrerlos
         ListaSimple subdirectorios = directorio.getSubdirectorios();
         for (int i = 0; i < subdirectorios.getSize(); i++) {
             Directorio subdir = (Directorio) subdirectorios.get(i);
-            agregarArchivosDeDirectorio(subdir); // Llamada recursiva
+            
+            // --- NUEVO: Agregar el directorio a la tabla ---
+            // Los directorios en esta simulación son lógicos (0 bloques)
+            String nombreDir = "[" + subdir.getNombre() + "]"; // Corchetes para distinguir
+            String rutaDir = subdir.getRutaCompleta();
+            
+            modeloTabla.addRow(new Object[]{nombreDir, rutaDir, "0 / 0", "DIR"});
+            // -----------------------------------------------
+            
+            // Llamada recursiva para entrar en el directorio
+            agregarArchivosDeDirectorio(subdir); 
         }
     }
 }
