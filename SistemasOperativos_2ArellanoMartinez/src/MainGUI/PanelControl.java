@@ -5,11 +5,8 @@
 package MainGUI;
 
 import Managers.ManejadorArchivo;
-import Models.Archivo;
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 
 public class PanelControl extends JPanel {
     private ManejadorArchivo manejador;
@@ -18,9 +15,10 @@ public class PanelControl extends JPanel {
     private PanelDisco panelDisco;
     private PanelTablaAsignacion panelTablaAsignacion;
     
-    private JButton btnCrear, btnEditar, btnEliminar, btnActualizar;
+    // Declaramos todos los botones, incluyendo el nuevo para Directorios
+    private JButton btnCrear, btnCrearDir, btnEditar, btnEliminar, btnActualizar;
     
-    public PanelControl(ManejadorArchivo manejador, PanelArchivos panelArchivos, PanelConsola panelConsola, PanelOutput panelOutput, PanelDisco panelDisco1, PanelTablaAsignacion panelTablaAsignacion1) {
+    public PanelControl(ManejadorArchivo manejador, PanelArchivos panelArchivos, PanelConsola panelConsola, PanelOutput panelOutput, PanelDisco panelDisco, PanelTablaAsignacion panelTablaAsignacion) {
         this.manejador = manejador;
         this.panelArchivos = panelArchivos;
         this.panelConsola = panelConsola;
@@ -30,15 +28,28 @@ public class PanelControl extends JPanel {
     }
     
     private void inicializarPanel() {
-        setLayout(new FlowLayout());
+        // CAMBIO: Usamos GridLayout(3, 2) para que quepan los 5 botones
+        // 3 filas, 2 columnas, con espacio de 5px entre ellos.
+        setLayout(new GridLayout(3, 2, 5, 5)); 
+        
         setBorder(BorderFactory.createTitledBorder("Operaciones CRUD (Solo Administrador)"));
         
         btnCrear = new JButton("Crear Archivo");
+        btnCrearDir = new JButton("Crear Directorio"); // <-- NUEVO BOTÓN
         btnEditar = new JButton("Editar Archivo");
-        btnEliminar = new JButton("Eliminar Archivo");
+        btnEliminar = new JButton("Eliminar");
         btnActualizar = new JButton("Actualizar Vista");
         
+        // Agregar tooltips para ayuda visual
+        btnCrear.setToolTipText("Crear un nuevo archivo y asignar bloques");
+        btnCrearDir.setToolTipText("Crear una nueva carpeta (directorio)");
+        btnEditar.setToolTipText("Modificar contenido de un archivo existente");
+        btnEliminar.setToolTipText("Eliminar archivo o directorio seleccionado");
+        btnActualizar.setToolTipText("Refrescar visualmente el árbol");
+        
+        // Añadir botones al panel (El orden importa en GridLayout)
         add(btnCrear);
+        add(btnCrearDir); // <-- AÑADIR AL PANEL
         add(btnEditar);
         add(btnEliminar);
         add(btnActualizar);
@@ -48,33 +59,49 @@ public class PanelControl extends JPanel {
     
     private void configurarEventos() {
         btnCrear.addActionListener(e -> crearArchivo());
+        btnCrearDir.addActionListener(e -> crearDirectorio()); // <-- NUEVO EVENTO
         btnEditar.addActionListener(e -> editarArchivo());
         btnEliminar.addActionListener(e -> eliminarArchivo());
+        
+        // El botón actualizar es manual, aunque el sistema ya se actualiza solo
         btnActualizar.addActionListener(e -> {
             panelArchivos.actualizarArbol();
             if (panelDisco != null) panelDisco.actualizarDisco();
             if (panelTablaAsignacion != null) panelTablaAsignacion.actualizarTabla();
         });
-        
     }
     
     private void crearArchivo() {
-        String nombre = JOptionPane.showInputDialog(this, "Nombre del archivo:");
+        String nombre = JOptionPane.showInputDialog(this, "Nombre del archivo (ej: notas.txt):");
         if (nombre != null && !nombre.trim().isEmpty()) {
             String tamanoStr = JOptionPane.showInputDialog(this, "Tamaño en bloques:");
             try {
                 int tamano = Integer.parseInt(tamanoStr);
                 
-                // Crear archivo en la raíz por simplicidad
+                // Crear ruta (por ahora en la raíz)
                 String ruta = "/" + nombre;
-                // CAMBIO: Ya no llamamos a crearArchivo directamente.
-                // Ahora solicitamos un PROCESO para que haga el trabajo.
+                
+                // Solicitamos el PROCESO al manejador
                 manejador.solicitarOperacion("CREAR", ruta, "admin", tamano);
 
                 panelConsola.agregarLinea("Solicitud de PROCESO 'CREAR' enviada para: " + nombre);
             } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(this, "Tamaño inválido");
+                JOptionPane.showMessageDialog(this, "Tamaño inválido. Ingrese un número entero.");
             }
+        }
+    }
+    
+    // NUEVO MÉTODO: Crear Directorio
+    private void crearDirectorio() {
+        String nombre = JOptionPane.showInputDialog(this, "Nombre del Directorio:");
+        if (nombre != null && !nombre.trim().isEmpty()) {
+            String ruta = "/" + nombre;
+            
+            // Solicitamos el proceso. Tamaño 0 porque los directorios 
+            // en esta simulación son lógicos (no ocupan bloques físicos del SD).
+            manejador.solicitarOperacion("CREAR_DIR", ruta, "admin", 0);
+            
+            panelConsola.agregarLinea("Solicitud 'CREAR_DIR' enviada para: " + nombre);
         }
     }
     
@@ -91,45 +118,50 @@ public class PanelControl extends JPanel {
             
             if (nuevoContenido != null) {
                 String ruta = "/" + nombreArchivo;
-                // CAMBIO: Solicitamos un PROCESO para actualizar.
-                // Pasamos el contenido nuevo en el 'Proceso.java' (aunque tu constructor actual no lo pide,
-                // el 'ManejadorArchivo.solicitarOperacion' lo ignora. Lo ideal sería mejorarlo,
-                // pero por ahora usamos el 'manejador.actualizarArchivo' para simular).
-
-                // Solución temporal (ya que 'solicitarOperacion' no tiene para 'datos'):
+                
+                // Solución temporal: Llamada directa para editar contenido
+                // Idealmente esto también sería un proceso "WRITE"
                 boolean exito = manejador.actualizarArchivo(ruta, nuevoContenido, "admin");
 
                 if (exito) {
-                    panelConsola.agregarLinea("Archivo editado (modo directo): " + nombreArchivo);
+                    panelConsola.agregarLinea("Archivo editado: " + nombreArchivo);
                 } else {
                     panelConsola.agregarLinea("ERROR: No se pudo editar el archivo");
                 }
             }
         } else {
-            JOptionPane.showMessageDialog(this, "Seleccione un archivo primero");
+            JOptionPane.showMessageDialog(this, "Seleccione un archivo del árbol primero.");
         }
     }
     
     private void eliminarArchivo() {
         String archivoSeleccionado = panelArchivos.getArchivoSeleccionado();
-        if (archivoSeleccionado != null && archivoSeleccionado.contains("(")) {
-            String nombreArchivo = archivoSeleccionado.split("\\(")[0].trim();
-            
-            int confirmacion = JOptionPane.showConfirmDialog(this,
-                "¿Está seguro de eliminar " + nombreArchivo + "?",
-                "Confirmar Eliminación",
-                JOptionPane.YES_NO_OPTION);
-            
-            if (confirmacion == JOptionPane.YES_OPTION) {
-             String ruta = "/" + nombreArchivo;
+        
+        if (archivoSeleccionado == null) {
+            JOptionPane.showMessageDialog(this, "Seleccione un archivo o directorio primero.");
+            return;
+        }
 
-             // CAMBIO: Solicitamos un PROCESO para eliminar.
+        // Limpiar el nombre (quitar la info de tamaño que pone el JTree)
+        String nombreLimpio;
+        if (archivoSeleccionado.contains("(")) {
+            nombreLimpio = archivoSeleccionado.split("\\(")[0].trim();
+        } else {
+            nombreLimpio = archivoSeleccionado.trim();
+        }
+        
+        int confirmacion = JOptionPane.showConfirmDialog(this,
+            "¿Está seguro de eliminar '" + nombreLimpio + "'?",
+            "Confirmar Eliminación",
+            JOptionPane.YES_NO_OPTION);
+        
+        if (confirmacion == JOptionPane.YES_OPTION) {
+             String ruta = "/" + nombreLimpio;
+
+             // Solicitamos el PROCESO de eliminación
              manejador.solicitarOperacion("ELIMINAR", ruta, "admin", 0);
 
-             panelConsola.agregarLinea("Solicitud de PROCESO 'ELIMINAR' enviada para: " + nombreArchivo);
-            }
-        } else {
-            JOptionPane.showMessageDialog(this, "Seleccione un archivo primero");
+             panelConsola.agregarLinea("Solicitud de PROCESO 'ELIMINAR' enviada para: " + nombreLimpio);
         }
     }
 }

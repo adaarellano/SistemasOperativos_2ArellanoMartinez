@@ -97,6 +97,9 @@ public class ManejadorArchivo {
         logConsola("Total bloques: " + totalBloques);
         logConsola("Planificador por defecto: FIFO");
         logConsola("Modo inicial: Administrador");
+        
+        // 7. Iniciar el hilo del planificador (¡NUEVO!)
+        iniciarHiloPlanificador();
     }
     
     /**
@@ -396,6 +399,9 @@ public class ManejadorArchivo {
         }
 
         logConsola("✅ " + cantidadBloques + " bloques asignados exitosamente");
+        
+        
+        logConsola("📉 Bloques restantes: " + (getTotalBloques() - getBloquesOcupados()) + "/" + getTotalBloques());
         return true;
     }
 
@@ -863,6 +869,48 @@ public class ManejadorArchivo {
             );
         }
     }
+    
+    /**
+     * Crea un directorio en el sistema.
+     * Los directorios son lógicos y no ocupan bloques en esta simulación.
+     */
+    public boolean crearDirectorio(String ruta, String usuario) {
+        logConsola("=== SOLICITANDO CREACIÓN DE DIRECTORIO ===");
+        logConsola("Ruta: " + ruta);
+        
+        if (!verificarPermisosEscritura(usuario)) {
+            logConsola("❌ ERROR: Sin permisos");
+            return false;
+        }
+        
+        try {
+            // Lógica para encontrar el padre y crear el hijo
+            String[] partes = ruta.split("/");
+            String nombreNuevoDir = partes[partes.length - 1];
+            String rutaPadre = obtenerRutaDirectorio(ruta);
+            
+            logConsola("Directorio Padre: " + rutaPadre);
+            
+            Directorio padre = buscarOCrearDirectorio(rutaPadre);
+            
+            if (padre != null) {
+                Directorio nuevo = padre.crearSubdirectorio(nombreNuevoDir);
+                if (nuevo != null) {
+                    // IMPORTANTE: No incrementamos bloquesOcupados porque es lógico
+                    archivosCreados++; // Opcional: contar directorios en estadísticas
+                    operacionesRealizadas++;
+                    
+                    logConsola("✅ DIRECTORIO CREADO: " + nombreNuevoDir);
+                    return true;
+                } else {
+                    logConsola("❌ ERROR: El directorio ya existe");
+                }
+            }
+        } catch (Exception e) {
+            logConsola("❌ ERROR: " + e.getMessage());
+        }
+        return false;
+    }
 
     /**
      * @return the archivosEliminados
@@ -870,4 +918,27 @@ public class ManejadorArchivo {
     public int getArchivosEliminados() {
         return archivosEliminados;
     }
-}    // ... otros métodos existentes
+/**
+     * Hilo que revisa constantemente el estado de los procesos.
+     * Actúa como el "Reloj" del Sistema Operativo para el planificador.
+     */
+    private void iniciarHiloPlanificador() {
+        Thread hiloPlanificador = new Thread(() -> {
+            while (sistemaActivo) {
+                try {
+                    // Ejecutar el planificador para limpiar procesos terminados
+                    // y actualizar la GUI si es necesario
+                    planificarProcesos();
+                    
+                    // Revisar 4 veces por segundo
+                    Thread.sleep(250); 
+                } catch (InterruptedException e) {
+                    if (sistemaActivo) System.err.println("Hilo planificador interrumpido");
+                }
+            }
+        });
+        hiloPlanificador.setName("CPU-Scheduler-Thread");
+        hiloPlanificador.setDaemon(true);
+        hiloPlanificador.start();
+    }
+}

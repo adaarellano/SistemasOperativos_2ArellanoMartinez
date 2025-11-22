@@ -32,17 +32,9 @@ public class PanelArchivos extends JPanel {
         modeloArbol = new DefaultTreeModel(raiz);
         arbolArchivos = new JTree(modeloArbol);
         
-        // Configurar el árbol
-        arbolArchivos.setRootVisible(true);
+        // Configurar el árbol para permitir selección simple
+        arbolArchivos.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         arbolArchivos.setShowsRootHandles(true);
-        
-        // Agregar listener para doble clic
-        arbolArchivos.addTreeSelectionListener(e -> {
-            DefaultMutableTreeNode nodo = (DefaultMutableTreeNode) arbolArchivos.getLastSelectedPathComponent();
-            if (nodo != null && nodo.getUserObject() instanceof String) {
-                // Puedes agregar funcionalidad de selección aquí
-            }
-        });
         
         add(new JScrollPane(arbolArchivos), BorderLayout.CENTER);
     }
@@ -52,19 +44,28 @@ public class PanelArchivos extends JPanel {
     }
     
     public void actualizarArbol() {
-        DefaultMutableTreeNode raizArbol = new DefaultMutableTreeNode("Sistema de Archivos");
-        modeloArbol.setRoot(raizArbol);
-        
-        // Agregar directorio raíz del sistema simulado
-        agregarDirectorioAlArbol(manejador.getRaiz(), raizArbol);
-        
-        // Expandir todo
-        for (int i = 0; i < arbolArchivos.getRowCount(); i++) {
-            arbolArchivos.expandRow(i);
-        }
+        // Envolver en invokeLater asegura que la actualización visual
+        // ocurra en el hilo correcto
+        SwingUtilities.invokeLater(() -> {
+            DefaultMutableTreeNode raiz = new DefaultMutableTreeNode("Sistema de Archivos");
+            
+            // Agregar directorio raíz
+            if (manejador != null && manejador.getRaiz() != null) {
+                agregarDirectorioAlArbol(manejador.getRaiz(), raiz);
+            }
+            
+            modeloArbol.setRoot(raiz);
+            modeloArbol.reload();
+            
+            // Expandir todo para ver los archivos
+            for (int i = 0; i < arbolArchivos.getRowCount(); i++) {
+                arbolArchivos.expandRow(i);
+            }
+        });
     }
     
     private void agregarDirectorioAlArbol(Directorio directorio, DefaultMutableTreeNode nodoPadre) {
+        // Formato: Nombre (X archivos, Y directorios)
         String textoNodo = directorio.getNombre() + " (" + 
                           directorio.getArchivos().getSize() + " archivos, " +
                           directorio.getSubdirectorios().getSize() + " directorios)";
@@ -72,40 +73,41 @@ public class PanelArchivos extends JPanel {
         DefaultMutableTreeNode nodoDirectorio = new DefaultMutableTreeNode(textoNodo);
         nodoPadre.add(nodoDirectorio);
         
-        // Agregar archivos
-        ListaSimple archivos = directorio.getArchivos();
-        for (int i = 0; i < archivos.getSize(); i++) {
-            Archivo archivo = (Archivo) archivos.get(i);
-            String textoArchivo = archivo.getNombre() + " (" + 
-                                archivo.getTamañoBloques() + " bloques)";
-            nodoDirectorio.add(new DefaultMutableTreeNode(textoArchivo));
-        }
-        
         // Agregar subdirectorios recursivamente
         ListaSimple subdirectorios = directorio.getSubdirectorios();
         for (int i = 0; i < subdirectorios.getSize(); i++) {
             Directorio subdir = (Directorio) subdirectorios.get(i);
             agregarDirectorioAlArbol(subdir, nodoDirectorio);
         }
-    }
-    
-    public String getArchivoSeleccionado() {
-        TreePath seleccion = arbolArchivos.getSelectionPath();
-        if (seleccion != null) {
-            Object ultimoComponente = seleccion.getLastPathComponent();
-            if (ultimoComponente instanceof DefaultMutableTreeNode) {
-                String texto = ultimoComponente.toString();
-                // Extraer solo el nombre del archivo (antes del paréntesis)
-                if (texto.contains("(")) {
-                    return texto.split("\\(")[0].trim();
-                }
-                return texto;
-            }
+        
+        // Agregar archivos
+        ListaSimple archivos = directorio.getArchivos();
+        for (int i = 0; i < archivos.getSize(); i++) {
+            Archivo archivo = (Archivo) archivos.get(i);
+            // Formato: Nombre (X/Y bloques)
+            String textoArchivo = archivo.getNombre() + " (" + 
+                                archivo.getTamañoBloques() + "/" + 
+                                archivo.getBloquesReservados() + " bloques)";
+            nodoDirectorio.add(new DefaultMutableTreeNode(textoArchivo));
         }
-        return null;
     }
     
-    public JTree getArbolArchivos() {
-        return arbolArchivos;
+    /**
+     * Método robusto para obtener el texto del nodo seleccionado.
+     */
+    public String getArchivoSeleccionado() {
+        // Forma segura de obtener la selección
+        DefaultMutableTreeNode nodo = (DefaultMutableTreeNode) arbolArchivos.getLastSelectedPathComponent();
+        
+        if (nodo == null) {
+            return null; // Nada seleccionado
+        }
+        
+        if (nodo.isRoot()) {
+            return null; // No dejar seleccionar la raíz
+        }
+        
+        // Retorna el texto (UserObject)
+        return nodo.toString();
     }
 }

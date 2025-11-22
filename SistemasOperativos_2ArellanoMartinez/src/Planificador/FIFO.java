@@ -42,7 +42,7 @@ public class FIFO implements PlanificadorDisco {
     @Override
     public SolicitudDisco obtenerSiguiente() {
         if (colaSolicitudes.isEmpty()) {
-            if (consola != null) consola.agregarLinea("FIFO - No hay solicitudes pendientes");
+            // ELIMINADO: if (consola != null) consola.agregarLinea("FIFO - No hay solicitudes pendientes");
             return null;
         }
         
@@ -57,9 +57,6 @@ public class FIFO implements PlanificadorDisco {
         if (consola != null) {
             consola.agregarLinea("FIFO - Procesando: " + siguiente.getTipoOperacion() + 
                                " bloque " + nuevoCabezal);
-            consola.agregarLinea("   - Distancia recorrida: " + distancia);
-            consola.agregarLinea("   - Cabezal: " + cabezalActual + " → " + nuevoCabezal);
-            consola.agregarLinea("   - Solicitudes restantes: " + colaSolicitudes.getSize());
         }
         
         cabezalActual = nuevoCabezal;

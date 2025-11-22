@@ -173,6 +173,10 @@ public class Proceso {
                     String contenido = manejadorArchivo.leerArchivo(rutaArchivo, usuario);
                     exito = (contenido != null);
                     break;
+                case "CREAR_DIR":
+                    // Llama al método para crear directorios
+                    exito = manejadorArchivo.crearDirectorio(rutaArchivo, usuario);
+                    break;
                 case "ACTUALIZAR":
                     exito = manejadorArchivo.actualizarArchivo(rutaArchivo, datos, usuario);
                     break;

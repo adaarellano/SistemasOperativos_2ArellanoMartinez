@@ -32,21 +32,17 @@ public class SSTF implements PlanificadorDisco {
         }
     }
     
-    @Override
+@Override
     public SolicitudDisco obtenerSiguiente() {
         if (colaSolicitudes.isEmpty()) {
-            if (consola != null) {
-                consola.agregarLinea("SSTF - No hay solicitudes pendientes");
-            }
+            // ELIMINADO: El log de "No hay solicitudes" para evitar spam
             return null;
         }
         
-        // SI TENEMOS CONSOLA, MOSTRAMOS DETALLES
+        // SI TENEMOS CONSOLA, MOSTRAMOS DETALLES DE LA DECISIÓN
         if (consola != null) {
             consola.agregarLinea("\n=== SSTF - BUSCANDO SIGUIENTE SOLICITUD ===");
             consola.agregarLinea("Cabezal actual: " + cabezalActual);
-            consola.agregarLinea("Solicitudes pendientes: " + colaSolicitudes.getSize());
-            consola.agregarLinea("--- CALCULANDO DISTANCIAS ---");
         }
         
         SolicitudDisco masCercana = null;
@@ -59,21 +55,10 @@ public class SSTF implements PlanificadorDisco {
             int bloque = solicitud.getBloqueSolicitado();
             int distancia = Math.abs(bloque - cabezalActual);
             
-            // MOSTRAR CÁLCULO EN CONSOLA
-            if (consola != null) {
-                consola.agregarLinea("  Bloque " + bloque + " - Distancia: " + distancia + 
-                                   " (|" + cabezalActual + " - " + bloque + "|)");
-            }
-            
             if (distancia < distanciaMinima) {
                 distanciaMinima = distancia;
                 masCercana = solicitud;
                 indiceMasCercano = i;
-                
-                if (consola != null) {
-                    consola.agregarLinea("    -> NUEVA MAS CERCANA: Bloque " + bloque + 
-                                       " (distancia: " + distancia + ")");
-                }
             }
         }
         
@@ -83,17 +68,10 @@ public class SSTF implements PlanificadorDisco {
             colaSolicitudes.remove(elemento);
             
             int nuevoCabezal = masCercana.getBloqueSolicitado();
-            int distanciaRecorrida = Math.abs(nuevoCabezal - cabezalActual);
             
-            // MOSTRAR RESULTADO EN CONSOLA
             if (consola != null) {
-                consola.agregarLinea("--- RESULTADO SSTF ---");
-                consola.agregarLinea("Solicitud seleccionada: " + masCercana.getTipoOperacion() + 
-                                   " bloque " + nuevoCabezal);
-                consola.agregarLinea("Distancia recorrida: " + distanciaRecorrida);
-                consola.agregarLinea("Cabezal: " + cabezalActual + " -> " + nuevoCabezal);
-                consola.agregarLinea("Solicitudes restantes: " + colaSolicitudes.getSize());
-                consola.agregarLinea("=== FIN DECISION SSTF ===\n");
+                consola.agregarLinea("SSTF eligió: Bloque " + nuevoCabezal + 
+                                   " (Distancia: " + distanciaMinima + ")");
             }
             
             cabezalActual = nuevoCabezal;
