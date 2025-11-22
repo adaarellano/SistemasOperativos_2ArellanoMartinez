@@ -28,16 +28,11 @@ public class Interfaz extends JFrame {
     private PanelArchivos panelArchivos;
     private PanelConsola panelConsola;
     private PanelControl panelControl;
-    private PanelDetalles panelDetalles; // NUEVO: Panel para detalles
+    private PanelDetalles panelDetalles; 
     private PanelDisco panelDisco;
     private PanelTablaAsignacion panelTablaAsignacion;
     private JComboBox<String> comboPoliticas;
-<<<<<<< HEAD
-    private JSplitPane splitPrincipal;
-
-=======
     private PanelProcesos panelProcesos;
->>>>>>> day
     
     // Para persistencia JSON
     private Gson gson;
@@ -58,7 +53,7 @@ public class Interfaz extends JFrame {
         
         // Panel superior - Modos y políticas
         JPanel panelSuperior = crearPanelSuperior();
-        splitPrincipal = crearPanelCentral();
+        
         // Panel central dividido en 3 partes
         JSplitPane splitPrincipal = crearPanelCentral();
         
@@ -103,33 +98,6 @@ public class Interfaz extends JFrame {
         return panelSuperior;
     }
     
-<<<<<<< HEAD
-     private JSplitPane crearPanelCentral() {
-        // Panel izquierdo - Archivos
-        panelArchivos = new PanelArchivos(manejador);
-        
-        // Panel derecho dividido verticalmente
-        JSplitPane splitDerecho = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-        
-        // Panel superior derecho - Consola
-        panelConsola = new PanelConsola();
-        manejador.setPanelConsola(panelConsola);
-        
-        // Panel inferior derecho - Output
-        PanelOutput panelOutput = new PanelOutput();
-        manejador.setPanelOutput(panelOutput);
-        
-        splitDerecho.setTopComponent(panelConsola);
-        splitDerecho.setBottomComponent(panelOutput);
-        splitDerecho.setDividerLocation(300);
-
-        // **CORRECCIÓN: PanelControl debe estar en el layout principal, no en el split**
-        panelControl = new PanelControl(manejador, panelArchivos, panelConsola, panelOutput);
-        
-        // Split principal (izquierda: archivos, derecha: consola+output)
-        JSplitPane splitPrincipal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, 
-                                                panelArchivos, splitDerecho);
-=======
     private JSplitPane crearPanelCentral() {
         // === PANEL IZQUIERDO (Archivos + Disco) ===
         JPanel panelIzquierdo = new JPanel(new BorderLayout());
@@ -139,7 +107,7 @@ public class Interfaz extends JFrame {
         manejador.setPanelArchivos(panelArchivos);
 
         // 2. Panel de Disco (Cuadrícula)
-        panelDisco = new PanelDisco(manejador); // <-- INICIALIZA EL NUEVO PANEL
+        panelDisco = new PanelDisco(manejador); 
         manejador.setPanelDisco(panelDisco);
 
         // Usamos un JSplitPane vertical para el lado izquierdo
@@ -157,12 +125,12 @@ public class Interfaz extends JFrame {
         panelDerecho.addTab("Consola", panelConsola);
 
         // Pestaña 2: Gestor de Procesos (NUEVO)
-        panelProcesos = new PanelProcesos(manejador); // <-- AÑADE ESTAS LÍNEAS
+        panelProcesos = new PanelProcesos(manejador);
         panelDerecho.addTab("Gestor de Procesos", panelProcesos);
 
         // Pestaña 3: Tabla de Asignación
         panelTablaAsignacion = new PanelTablaAsignacion(manejador);
-            manejador.setPanelTablaAsignacion(panelTablaAsignacion);
+        manejador.setPanelTablaAsignacion(panelTablaAsignacion);
         panelDerecho.addTab("Tabla de Asignación", panelTablaAsignacion);
 
         // Pestaña 4: Detalles (Bytes)
@@ -170,17 +138,16 @@ public class Interfaz extends JFrame {
         manejador.setPanelOutput(panelOutput);
         panelDerecho.addTab("Detalles (Bytes)", panelOutput);
 
-        // === PANEL DE CONTROL (Oculto) ===
-        // Le pasamos 'panelOutput' desde su declaración original
-        panelControl = new PanelControl(manejador, panelArchivos, panelConsola, panelOutput, panelDisco, panelTablaAsignacion); // <-- Añadido panelTablaAsignacion
+        // === PANEL DE CONTROL (Oculto inicialmente) ===
+        panelControl = new PanelControl(manejador, panelArchivos, panelConsola, panelOutput, panelDisco, panelTablaAsignacion);
         panelControl.setVisible(false);
         
+        // Agregamos el panel de control en la parte superior del panel izquierdo
         panelIzquierdo.add(panelControl, BorderLayout.NORTH);
         
         // === SPLIT PRINCIPAL ===
         // (Ahora divide el panelIzquierdo y el panelDerecho)
         JSplitPane splitPrincipal = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, panelIzquierdo, panelDerecho);
->>>>>>> day
         splitPrincipal.setDividerLocation(500);
         
         return splitPrincipal;
@@ -199,18 +166,12 @@ public class Interfaz extends JFrame {
         });
     }
     
-     private void cambiarModo(boolean esAdmin) {
+    private void cambiarModo(boolean esAdmin) {
         this.esModoAdministrador = esAdmin;
-        manejador.setEsAdministrador(esAdmin); // **IMPORTANTE: Actualizar el manejador**
+        manejador.setModoAdministrador(esAdmin); // Usar método correcto del manejador
         
-        // **CORRECCIÓN: Mostrar/ocultar el panel de control en el layout principal**
-        if (esAdmin) {
-            // Agregar panelControl al sur (inferior) del frame
-            add(panelControl, BorderLayout.SOUTH);
-        } else {
-            // Remover panelControl
-            remove(panelControl);
-        }
+        // Mostrar/ocultar panel de control
+        panelControl.setVisible(esAdmin);
         
         comboPoliticas.setEnabled(esAdmin);
         panelArchivos.actualizarVista(esAdmin);
@@ -218,13 +179,16 @@ public class Interfaz extends JFrame {
         String modo = esAdmin ? "ADMINISTRADOR" : "USUARIO";
         panelConsola.agregarLinea("=== MODO " + modo + " ACTIVADO ===");
         
-        // **IMPORTANTE: Revalidar y repintar para que los cambios se reflejen**
-        revalidate();
-        repaint();
+        if (esAdmin) {
+            panelConsola.agregarLinea("Acceso completo al sistema");
+            panelConsola.agregarLinea("Puede crear, editar y eliminar archivos");
+        } else {
+            panelConsola.agregarLinea("Acceso limitado - Solo lectura");
+        }
         
         panelDetalles.actualizarDetalles();
     }
-
+    
     // ===== PERSISTENCIA CON JSON =====
     
     private void guardarEstado() {
@@ -248,7 +212,6 @@ public class Interfaz extends JFrame {
     private void cargarEstado() {
         try {
             // Por simplicidad, en esta versión solo mostramos un mensaje
-            // En una versión completa aquí cargarías el estado desde JSON
             panelConsola.agregarLinea("🔄 Función de carga en desarrollo...");
             panelConsola.agregarLinea("Los archivos se guardan en la memoria del sistema");
             
@@ -257,30 +220,32 @@ public class Interfaz extends JFrame {
         }
     }
     
-
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             new Interfaz().setVisible(true);
         });
     }
     
+    // Clase interna para el estado del sistema (JSON)
     private static class EstadoSistema {
-    private int archivosCreados;
-    private int archivosEliminados;
-    private int operacionesRealizadas;
-    private int bloquesOcupados;
-    private String planificadorActual;
-    private String usuarioActual;
-    private boolean esModoAdministrador;
-    
-    public EstadoSistema(ManejadorArchivo manejador) {
-        this.archivosCreados = manejador.getArchivosCreados();
-        this.archivosEliminados = manejador.getArchivosEliminados();
-        this.operacionesRealizadas = manejador.getOperacionesRealizadas();
-        this.bloquesOcupados = manejador.getBloquesOcupados();
-        this.planificadorActual = manejador.getPlanificadorActual(); // Ahora funciona
-        this.usuarioActual = manejador.getUsuarioActual(); // Ahora funciona
-        this.esModoAdministrador = manejador.esAdministrador();
+        private int archivosCreados;
+        private int archivosEliminados;
+        private int operacionesRealizadas;
+        private int bloquesOcupados;
+        private String planificadorActual;
+        private String usuarioActual;
+        private boolean esModoAdministrador;
+        
+        public EstadoSistema(ManejadorArchivo manejador) {
+            this.archivosCreados = manejador.getArchivosCreados();
+            this.archivosEliminados = manejador.getArchivosEliminados();
+            this.operacionesRealizadas = manejador.getOperacionesRealizadas();
+            this.bloquesOcupados = manejador.getBloquesOcupados();
+            // Obtenemos el nombre de la política
+            this.planificadorActual = manejador.getPlanificadorActual().getNombrePolitica();
+            // Obtenemos el nombre del usuario (String)
+            this.usuarioActual = manejador.getUsuarioActual(); 
+            this.esModoAdministrador = manejador.esAdministrador();
+        }
     }
 }
-        }

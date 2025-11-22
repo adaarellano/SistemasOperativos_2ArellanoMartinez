@@ -59,7 +59,11 @@ public class PanelOutput extends JPanel {
             agregarLinea("   Bytes reservados: " + bytesReservados + " bytes");
             agregarLinea("   Espacio libre: " + (bytesReservados - bytesReales) + " bytes");
             agregarLinea("   Bloques usados: " + bloquesUsados + "/" + bloquesReservados);
-            agregarLinea("   Eficiencia: " + String.format("%.1f", (bytesReales * 100.0 / bytesReservados)) + "%");
+            
+            // Evitar división por cero si bloquesReservados es 0 (aunque no debería pasar)
+            double eficiencia = (bytesReservados > 0) ? (bytesReales * 100.0 / bytesReservados) : 0.0;
+            
+            agregarLinea("   Eficiencia: " + String.format("%.1f", eficiencia) + "%");
             agregarLinea("   Cadena de bloques: " + cadenaBloques);
             agregarLinea("------------------------------------------------------------");
         });

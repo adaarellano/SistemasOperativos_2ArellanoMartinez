@@ -4,56 +4,36 @@
  */
 package Managers;
 
-import Models.Archivo;
-import Models.Directorio;
-import Models.Usuario; // Importar la clase Usuario
+import Models.*;
+import Planificador.FIFO;
+import Planificador.SSTF;
+import Planificador.SCAN;
+import Planificador.CSCAN;
+import Planificador.PlanificadorDisco;
 import edd.ListaSimple;
-<<<<<<< HEAD
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-=======
 import MainGUI.*;
 import MainGUI.PanelOutput;
 import java.util.*;
 import javax.swing.SwingUtilities;
-import Managers.*;
->>>>>>> day
 
+/**
+ * Manejador principal del sistema de archivos
+ * Controla todo: archivos, directorios, procesos y planificación de disco
+ * VERSIÓN MODIFICADA PARA INTERFAZ GRÁFICA
+ */
 public class ManejadorArchivo {
+    // === ALMACENAMIENTO ===
+    private Bloque[] bloquesDisco;
     private Directorio raiz;
-    private int archivosCreados;
-    private int archivosEliminados;
-    private int operacionesRealizadas;
-    private int bloquesOcupados;
-    private int capacidadTotal;
-    private boolean esAdministrador;
-    private String planificadorActual;
-    private File directorioBase;
+    private int totalBloques = 100;
     
-<<<<<<< HEAD
-    // **NUEVO: Gestión de usuarios**
-    private Usuario usuarioActual;
-    private ListaSimple usuarios;
-    
-    public ManejadorArchivo() {
-        this.raiz = new Directorio("/");
-        this.archivosCreados = 0;
-        this.archivosEliminados = 0;
-        this.operacionesRealizadas = 0;
-        this.bloquesOcupados = 0;
-        this.capacidadTotal = 1000;
-        this.esAdministrador = false;
-        this.planificadorActual = "FIFO";
-=======
     // === USUARIOS Y PERMISOS ===
     private boolean esModoAdministrador = true;
     private String usuarioActual = "admin";
     private ListaSimple usuarios; // Lista de usuarios del sistema
-    private int cabezalActual = 0; // <-- AÑADIR ESTA LÍNEA
-    private Thread hiloDisco; //
+    
     private PanelOutput panelOutput;
-    private volatile boolean sistemaActivo = true;
+    
     // === PROCESOS ===
     private ListaSimple colaProcesos;
     private ListaSimple procesosActivos;
@@ -61,6 +41,9 @@ public class ManejadorArchivo {
     // === PLANIFICACIÓN DE DISCO ===
     private PlanificadorDisco planificadorActual;
     private ListaSimple solicitudesDisco;
+    private int cabezalActual = 0; 
+    private Thread hiloDisco; 
+    private volatile boolean sistemaActivo = true; 
     
     // === ESTADÍSTICAS ===
     private int archivosCreados = 0;
@@ -69,8 +52,8 @@ public class ManejadorArchivo {
     
     // === REFERENCIA A INTERFAZ ===
     private PanelConsola panelConsola;
-    private PanelArchivos panelArchivos; // <-- AÑADIR
-    private PanelDisco panelDisco; // <-- AÑADIR
+    private PanelArchivos panelArchivos; 
+    private PanelDisco panelDisco; 
     private PanelTablaAsignacion panelTablaAsignacion; 
     private PanelDetalles panelDetalles; 
     private BufferManager bufferManager;
@@ -90,39 +73,25 @@ public class ManejadorArchivo {
         for (int i = 0; i < totalBloques; i++) {
             bloquesDisco[i] = new Bloque(i);
         }
->>>>>>> day
         
-        // **NUEVO: Inicializar sistema de usuarios**
-        this.usuarios = new ListaSimple();
-        this.usuarioActual = new Usuario("usuario", "usuario"); // Usuario por defecto
+        // 2. Inicializar directorio raíz
+        raiz = new Directorio("/");
         
-<<<<<<< HEAD
-        // Crear usuario administrador por defecto
-        Usuario admin = new Usuario("admin", "admin");
-        usuarios.insertFinal(admin);
-=======
         // 3. Inicializar colas
         colaProcesos = new ListaSimple();
         procesosActivos = new ListaSimple();
         solicitudesDisco = new ListaSimple(); // 'solicitudesDisco' aquí es un 'ListaSimple'
         usuarios = new ListaSimple();
->>>>>>> day
         
-        // Establecer directorio base para archivos reales
-        String userHome = System.getProperty("user.home");
-        this.directorioBase = new File(userHome + "/FileSystemSimulator");
+        // 4. Crear usuarios por defecto
+        crearUsuariosPorDefecto();
         
-<<<<<<< HEAD
-        if (!directorioBase.exists()) {
-            if (directorioBase.mkdirs()) {
-                System.out.println("Directorio base creado: " + directorioBase.getAbsolutePath());
-=======
         // 5. Inicializar planificador (FIFO por defecto)
         // El 'setPanelConsola' lo inicializará correctamente
         planificadorActual = new FIFO(); 
         
         // 6. Iniciar el hilo del disco
-        iniciarHiloDisco(); // <-- AÑADIR ESTO
+        iniciarHiloDisco(); 
         
         logConsola("=== SISTEMA DE ARCHIVOS INICIALIZADO ===");
         logConsola("Total bloques: " + totalBloques);
@@ -422,8 +391,8 @@ public class ManejadorArchivo {
         
         // Marcar bloques como ocupados
         for (int i = 0; i < bloquesAsignados.getSize(); i++) {
-        Bloque bloque = (Bloque) bloquesAsignados.get(i);
-        bloque.ocuparBloque(archivo.getNombre(), -1);
+            Bloque bloque = (Bloque) bloquesAsignados.get(i);
+            bloque.ocuparBloque(archivo.getNombre(), -1);
         }
 
         logConsola("✅ " + cantidadBloques + " bloques asignados exitosamente");
@@ -623,41 +592,92 @@ public class ManejadorArchivo {
                 colaProcesos.remove(proceso);
                 logConsola("📊 Proceso en ejecución: " + proceso.getNombre());
                 break; // Solo planifica uno a la vez (simple)
->>>>>>> day
             }
         }
     }
     
-    // **NUEVO: Métodos de gestión de usuarios**
-    public boolean cambiarUsuario(String username) {
-        for (int i = 0; i < usuarios.getSize(); i++) {
-            Usuario usuario = (Usuario) usuarios.get(i);
-            if (usuario.getUsername().equals(username)) {
-                this.usuarioActual = usuario;
-                this.esAdministrador = usuario.esAdministrador();
-                return true;
-            }
+    // ===== BÚSQUEDAS Y NAVEGACIÓN =====
+    
+    /**
+     * Busca un archivo por ruta completa
+     */
+    public Archivo buscarArchivo(String ruta) {
+        String[] partes = ruta.split("/");
+        String nombreArchivo = partes[partes.length - 1];
+        String rutaDirectorio = obtenerRutaDirectorio(ruta);
+        
+        Directorio directorio = raiz.buscarDirectorioRecursivo(rutaDirectorio);
+        if (directorio != null) {
+            return directorio.buscarArchivo(nombreArchivo);
         }
-        return false;
+        
+        return null;
     }
     
-<<<<<<< HEAD
-    public boolean agregarUsuario(String username, String tipo) {
-        // Solo administradores pueden agregar usuarios
-        if (!esAdministrador) return false;
+    /**
+     * Busca o crea un directorio en la ruta especificada
+     */
+    private Directorio buscarOCrearDirectorio(String ruta) {
+        if (ruta == null || ruta.isEmpty() || ruta.equals("/")) {
+            return raiz;
+        }
         
-        // Verificar si ya existe
+        Directorio directorio = raiz.buscarDirectorioRecursivo(ruta);
+        if (directorio != null) {
+            return directorio;
+        }
+        
+        // Crear directorios recursivamente
+        String[] partes = ruta.split("/");
+        Directorio actual = raiz;
+        
+        for (String nombreDir : partes) {
+            if (nombreDir.isEmpty()) continue;
+            
+            Directorio subdir = actual.buscarSubdirectorio(nombreDir);
+            if (subdir == null) {
+                subdir = actual.crearSubdirectorio(nombreDir);
+                if (subdir == null) {
+                    return null;
+                }
+            }
+            actual = subdir;
+        }
+        
+        return actual;
+    }
+    
+    /**
+     * Extrae la ruta del directorio de una ruta completa de archivo
+     */
+    private String obtenerRutaDirectorio(String rutaArchivo) {
+        int lastSlash = rutaArchivo.lastIndexOf('/');
+        if (lastSlash <= 0) {
+            return "/";
+        }
+        return rutaArchivo.substring(0, lastSlash);
+    }
+    
+    // ===== VERIFICACIÓN DE PERMISOS =====
+    
+    private boolean verificarPermisosLectura(String usuario) {
+        return esModoAdministrador || buscarUsuario(usuario) != null;
+    }
+    
+    private boolean verificarPermisosEscritura(String usuario) {
+        return esModoAdministrador;
+    }
+    
+    private Usuario buscarUsuario(String username) {
         for (int i = 0; i < usuarios.getSize(); i++) {
             Usuario usuario = (Usuario) usuarios.get(i);
             if (usuario.getUsername().equals(username)) {
-                return false;
+                return usuario;
             }
         }
-        
-        Usuario nuevoUsuario = new Usuario(username, tipo);
-        usuarios.insertFinal(nuevoUsuario);
-        return true;
-=======
+        return null;
+    }
+    
     // ===== CONFIGURACIÓN DEL SISTEMA =====
     
     public void setModoAdministrador(boolean esAdmin) {
@@ -710,68 +730,53 @@ public class ManejadorArchivo {
         }
         
         logConsola("✅ Planificador cambiado exitosamente a " + planificadorActual.getNombrePolitica());
->>>>>>> day
     }
     
-    // **ACTUALIZADO: getUsuarioActual() ahora retorna el objeto Usuario**
-    public Usuario getUsuarioActual() {
+    // ===== GETTERS PARA LA INTERFAZ GRÁFICA =====
+    
+    public Bloque[] getBloquesDisco() {
+        return bloquesDisco;
+    }
+    
+    public Directorio getRaiz() {
+        return raiz;
+    }
+    
+    public ListaSimple getProcesosActivos() {
+        return procesosActivos;
+    }
+    
+    public ListaSimple getColaProcesos() {
+        return colaProcesos;
+    }
+    
+    public ListaSimple getSolicitudesDisco() {
+        return solicitudesDisco;
+    }
+    
+    public PlanificadorDisco getPlanificadorActual() {
+        return planificadorActual;
+    }
+    
+    public boolean esAdministrador() {
+        return esModoAdministrador;
+    }
+    
+    public String getUsuarioActual() {
         return usuarioActual;
     }
     
-    // **MÉTODO COMPATIBILIDAD: Para EstadoSistema que espera String**
-    public String getUsuarioActualNombre() {
-        return usuarioActual.getUsername();
+    public int getTotalBloques() {
+        return totalBloques;
     }
     
-    /**
-     * Método alternativo con nombre diferente para evitar conflictos
-     */
-    public String getNombreUsuarioActual() {
-        return esAdministrador ? "admin" : "usuario";
-    }
-    
-    // **ACTUALIZADO: Métodos CRUD con verificación de permisos**
-    public boolean crearArchivo(String nombre, int tamanoBloques, String usuario) {
-        // Verificar permisos usando la clase Usuario
-        if (!usuarioActual.puedeEscribir(null)) { // null porque es archivo nuevo
-            if (!usuarioActual.esAdministrador()) {
-                return false;
+    public int getBloquesOcupados() {
+        int ocupados = 0;
+        for (Bloque bloque : bloquesDisco) {
+            if (bloque.estaOcupado()) {
+                ocupados++;
             }
         }
-<<<<<<< HEAD
-        
-        if (bloquesOcupados + tamanoBloques > capacidadTotal) {
-            return false;
-        }
-        
-        try {
-            // Crear archivo real
-            File archivoReal = new File(directorioBase, nombre);
-            if (archivoReal.exists()) {
-                return false;
-            }
-            
-            if (!archivoReal.createNewFile()) {
-                return false;
-            }
-            
-            // Crear archivo simulado
-            Archivo archivo = new Archivo(nombre, tamanoBloques, usuarioActual.getUsername());
-            archivo.setRutaReal(archivoReal.getAbsolutePath());
-            
-            if (raiz.agregarArchivo(archivo)) {
-                archivosCreados++;
-                operacionesRealizadas++;
-                bloquesOcupados += tamanoBloques;
-                return true;
-            }
-            
-            return false;
-            
-        } catch (IOException e) {
-            System.err.println("Error al crear archivo real: " + e.getMessage());
-            return false;
-=======
         return ocupados;
     }
     
@@ -856,109 +861,13 @@ public class ManejadorArchivo {
                 archivo.getBloquesReservados(),
                 archivo.getInfoBloques()
             );
->>>>>>> day
         }
     }
-    
-    public String leerArchivo(String nombre, String usuario) {
-        // Buscar archivo primero
-        Archivo archivo = raiz.buscarArchivoRecursivo(nombre);
-        if (archivo == null) {
-            return null;
-        }
-        
-        // **NUEVO: Verificar permisos usando la clase Usuario**
-        if (!usuarioActual.puedeLeer(archivo)) {
-            System.err.println("Permiso denegado para leer: " + nombre);
-            return null;
-        }
-        
-        try {
-            // Leer archivo real
-            if (archivo.getRutaReal() == null) {
-                return null;
-            }
-            
-            File archivoReal = new File(archivo.getRutaReal());
-            if (!archivoReal.exists()) {
-                return null;
-            }
-            
-            byte[] bytes = Files.readAllBytes(archivoReal.toPath());
-            String contenido = new String(bytes, "UTF-8");
-            
-            operacionesRealizadas++;
-            return contenido;
-            
-        } catch (IOException e) {
-            System.err.println("Error al leer archivo: " + e.getMessage());
-            return null;
-        }
+
+    /**
+     * @return the archivosEliminados
+     */
+    public int getArchivosEliminados() {
+        return archivosEliminados;
     }
-    
-    public boolean eliminarArchivo(String nombre, String usuario) {
-        // Buscar archivo
-        Archivo archivo = raiz.buscarArchivoRecursivo(nombre);
-        if (archivo == null) {
-            return false;
-        }
-        
-        // **NUEVO: Verificar permisos**
-        if (!usuarioActual.puedeEscribir(archivo)) {
-            System.err.println("Permiso denegado para eliminar: " + nombre);
-            return false;
-        }
-        
-        // Eliminar archivo real
-        String rutaReal = archivo.getRutaReal();
-        if (rutaReal != null) {
-            File archivoReal = new File(rutaReal);
-            if (archivoReal.exists() && !archivoReal.delete()) {
-                return false;
-            }
-        }
-        
-        // Eliminar del sistema simulado
-        if (eliminarArchivoRecursivo(raiz, nombre)) {
-            archivosEliminados++;
-            operacionesRealizadas++;
-            bloquesOcupados -= archivo.getTamañoBloques();
-            return true;
-        }
-        
-        return false;
-    }
-    
-    // **ACTUALIZADO: cambiarModo ahora usa la clase Usuario**
-    public void setEsAdministrador(boolean esAdmin) {
-        this.esAdministrador = esAdmin;
-        if (esAdmin) {
-            this.usuarioActual = new Usuario("admin", "admin");
-        } else {
-            this.usuarioActual = new Usuario("usuario", "usuario");
-        }
-    }
-    
-    // **MÉTODO COMPATIBILIDAD: Para código existente**
-    public String getPlanificadorActual() { 
-        return planificadorActual; 
-    }
-    
-    // ... (el resto de tus métodos permanecen igual)
-    private boolean eliminarArchivoRecursivo(Directorio directorio, String nombreArchivo) {
-        if (directorio.eliminarArchivo(nombreArchivo)) {
-            return true;
-        }
-        
-        ListaSimple subdirectorios = directorio.getSubdirectorios();
-        for (int i = 0; i < subdirectorios.getSize(); i++) {
-            Directorio subdir = (Directorio) subdirectorios.get(i);
-            if (eliminarArchivoRecursivo(subdir, nombreArchivo)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    
-    // ... otros métodos existentes
-}
+}    // ... otros métodos existentes
