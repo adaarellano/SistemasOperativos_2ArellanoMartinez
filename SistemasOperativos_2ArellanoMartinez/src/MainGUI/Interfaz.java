@@ -10,6 +10,8 @@ import Models.Directorio;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import edd.ListaSimple;
+import Managers.*;
+import Models.*;
 
 import javax.swing.*;
 import java.awt.*;
@@ -24,7 +26,7 @@ public class Interfaz extends JFrame {
     private boolean esModoAdministrador = false;
     
     // Componentes principales
-    private JButton btnModoAdmin, btnModoUsuario;
+    private JButton btnModoAdmin, btnModoUsuario, btnModoProceso;
     private PanelArchivos panelArchivos;
     private PanelConsola panelConsola;
     private PanelControl panelControl;
@@ -75,7 +77,8 @@ public class Interfaz extends JFrame {
         JPanel panelSuperior = new JPanel(new FlowLayout());
         panelSuperior.setBorder(BorderFactory.createTitledBorder("Control del Sistema"));
         
-        btnModoAdmin = new JButton("Modo Administrador");
+        btnModoAdmin = new JButton("Admin Directo");
+        btnModoProceso = new JButton("Admin Proceso"); // NUEVO
         btnModoUsuario = new JButton("Modo Usuario");
         
         comboPoliticas = new JComboBox<>(new String[]{"FIFO", "SSTF", "SCAN", "C-SCAN"});
@@ -90,6 +93,7 @@ public class Interfaz extends JFrame {
         panelSuperior.add(comboPoliticas);
         panelSuperior.add(btnGuardar);
         panelSuperior.add(btnCargar);
+        panelSuperior.add(btnModoProceso); // Añadir
         
         // Configurar eventos de guardar/cargar
         btnGuardar.addActionListener(e -> guardarEstado());
@@ -174,9 +178,9 @@ private JSplitPane crearPanelCentral() {
 
 
     private void configurarEventos() {
-        btnModoAdmin.addActionListener(e -> cambiarModo(true));
-        btnModoUsuario.addActionListener(e -> cambiarModo(false));
-        
+        btnModoAdmin.addActionListener(e -> cambiarModo(1));   // 1 = Admin Directo
+        btnModoProceso.addActionListener(e -> cambiarModo(2)); // 2 = Admin Proceso (Batch)
+        btnModoUsuario.addActionListener(e -> cambiarModo(0)); // 0 = Usuario
         comboPoliticas.addActionListener(e -> {
             if (esModoAdministrador) {
                 String politica = (String) comboPoliticas.getSelectedItem();
@@ -186,28 +190,39 @@ private JSplitPane crearPanelCentral() {
         });
     }
     
-    private void cambiarModo(boolean esAdmin) {
-        this.esModoAdministrador = esAdmin;
-        manejador.setModoAdministrador(esAdmin); // Usar método correcto del manejador
-        
-        // Mostrar/ocultar panel de control
-        panelControl.setVisible(esAdmin);
-        
-        comboPoliticas.setEnabled(esAdmin);
-        panelArchivos.actualizarVista(esAdmin);
-        
-        String modo = esAdmin ? "ADMINISTRADOR" : "USUARIO";
-        panelConsola.agregarLinea("=== MODO " + modo + " ACTIVADO ===");
-        
-        if (esAdmin) {
-            panelConsola.agregarLinea("Acceso completo al sistema");
-            panelConsola.agregarLinea("Puede crear, editar y eliminar archivos");
-        } else {
-            panelConsola.agregarLinea("Acceso limitado - Solo lectura");
-        }
-        
-        panelDetalles.actualizarDetalles();
+   
+    private void cambiarModo(int tipoModo) {
+    boolean esAdmin = (tipoModo == 1 || tipoModo == 2);
+    boolean esBatch = (tipoModo == 2);
+    
+    this.esModoAdministrador = esAdmin;
+    
+    // 1. Configurar Manejador
+    manejador.setModoAdministrador(esAdmin);
+    manejador.setModoBatch(esBatch); // Activar/Desactivar cola de espera
+    
+    // 2. Configurar GUI
+    panelControl.setVisible(esAdmin);
+    panelControl.setModoProceso(esBatch); // Activar botón "Procesar"
+    
+    comboPoliticas.setEnabled(esAdmin);
+    panelArchivos.actualizarVista(esAdmin);
+    
+    // 3. Mensajes
+    String titulo = "";
+    switch(tipoModo) {
+        case 0: titulo = "USUARIO (Solo Lectura)"; break;
+        case 1: titulo = "ADMINISTRADOR (Ejecución Inmediata)"; break;
+        case 2: titulo = "ADMINISTRADOR PROCESO (Cola de Espera)"; break;
     }
+    
+    panelConsola.agregarLinea("=== MODO " + titulo + " ACTIVADO ===");
+    if (esBatch) {
+        panelConsola.agregarLinea("ℹ Las operaciones se guardarán en cola.");
+        panelConsola.agregarLinea("ℹ Presione 'PROCESAR COLA' para ejecutar algoritmos.");
+    }
+    panelDetalles.actualizarDetalles();
+}
     
     // ===== PERSISTENCIA CON JSON =====
     
@@ -245,6 +260,8 @@ private JSplitPane crearPanelCentral() {
             new Interfaz().setVisible(true);
         });
     }
+    
+   
     
     // Clase interna para el estado del sistema (JSON)
     private static class EstadoSistema {

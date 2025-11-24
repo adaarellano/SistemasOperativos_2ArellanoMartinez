@@ -7,6 +7,8 @@ package MainGUI;
 import Managers.ManejadorArchivo;
 import javax.swing.*;
 import java.awt.*;
+import Managers.*;
+import Models.*;
 
 public class PanelControl extends JPanel {
     private ManejadorArchivo manejador;
@@ -16,7 +18,7 @@ public class PanelControl extends JPanel {
     private PanelTablaAsignacion panelTablaAsignacion;
     
     // Declaramos todos los botones, incluyendo el nuevo para Directorios
-    private JButton btnCrear, btnCrearDir, btnEditar, btnEliminar, btnActualizar;
+    private JButton btnCrear, btnCrearDir, btnEditar, btnEliminar, btnActualizar, btnProcesar;
     
     public PanelControl(ManejadorArchivo manejador, PanelArchivos panelArchivos, PanelConsola panelConsola, PanelOutput panelOutput, PanelDisco panelDisco, PanelTablaAsignacion panelTablaAsignacion) {
         this.manejador = manejador;
@@ -30,8 +32,7 @@ public class PanelControl extends JPanel {
     private void inicializarPanel() {
         // CAMBIO: Usamos GridLayout(3, 2) para que quepan los 5 botones
         // 3 filas, 2 columnas, con espacio de 5px entre ellos.
-        setLayout(new GridLayout(3, 2, 5, 5)); 
-        
+        setLayout(new GridLayout(4, 2, 5, 5));        
         setBorder(BorderFactory.createTitledBorder("Operaciones CRUD (Solo Administrador)"));
         
         btnCrear = new JButton("Crear Archivo");
@@ -39,6 +40,11 @@ public class PanelControl extends JPanel {
         btnEditar = new JButton("Editar Archivo");
         btnEliminar = new JButton("Eliminar");
         btnActualizar = new JButton("Actualizar Vista");
+        
+        //modo 2 admi
+        btnProcesar = new JButton("▶ PROCESAR COLA");
+        btnProcesar.setBackground(new Color(200, 255, 200)); // Color verde suave
+        btnProcesar.setEnabled(false); // Desactivado por defecto
         
         // Agregar tooltips para ayuda visual
         btnCrear.setToolTipText("Crear un nuevo archivo y asignar bloques");
@@ -53,7 +59,8 @@ public class PanelControl extends JPanel {
         add(btnEditar);
         add(btnEliminar);
         add(btnActualizar);
-        
+        add(btnActualizar);
+        add(btnProcesar);
         configurarEventos();
     }
     
@@ -68,6 +75,10 @@ public class PanelControl extends JPanel {
             panelArchivos.actualizarArbol();
             if (panelDisco != null) panelDisco.actualizarDisco();
             if (panelTablaAsignacion != null) panelTablaAsignacion.actualizarTabla();
+        });
+        /// Modo 2 admi 
+        btnProcesar.addActionListener(e -> {
+        manejador.procesarLotePendiente();
         });
     }
     
@@ -115,7 +126,6 @@ private void crearDirectorio() {
     }
     
     private void editarArchivo() {
-
         // 1. Obtener nombre limpio
         String nombreSeleccionado = panelArchivos.getArchivoSeleccionado();
         
@@ -151,36 +161,31 @@ private void crearDirectorio() {
             String contenidoActual = manejador.leerArchivo(rutaArchivo, "admin");
             if (contenidoActual == null) contenidoActual = ""; 
             
-            // --- AQUÍ ESTÁ EL CAMBIO PARA HACERLO GRANDE ---
-            
             // Creamos un Área de Texto de 15 filas x 50 columnas
             JTextArea textArea = new JTextArea(15, 50); 
             textArea.setText(contenidoActual);
             textArea.setLineWrap(true);       // Que el texto baje automáticamente
             textArea.setWrapStyleWord(true);  // Que no corte palabras a la mitad
             
-            // Le ponemos barras de desplazamiento (scroll)
             JScrollPane scrollPane = new JScrollPane(textArea);
             
-            // Mostramos el diálogo con nuestro componente personalizado
             int result = JOptionPane.showConfirmDialog(this, 
                 scrollPane, 
                 "Editando: " + nombreSeleccionado, 
                 JOptionPane.OK_CANCEL_OPTION, 
                 JOptionPane.PLAIN_MESSAGE);
             
-            // 2. Si le dio OK, guardamos
+            // 2. Si le dio OK, enviamos la solicitud
             if (result == JOptionPane.OK_OPTION) {
                 String nuevoContenido = textArea.getText();
                 
                 if (!nuevoContenido.equals(contenidoActual)) {
-                    boolean exito = manejador.actualizarArchivo(rutaArchivo, nuevoContenido, "admin");
+                    // --- CORRECCIÓN AQUÍ ---
+                    // Ya no esperamos un boolean, solo enviamos la orden.
+                    manejador.solicitarOperacionEditar(rutaArchivo, nuevoContenido, "admin");
 
-                    if (exito) {
-                        panelConsola.agregarLinea("Archivo editado: " + nombreSeleccionado);
-                    } else {
-                        panelConsola.agregarLinea("ERROR: No se pudo editar el archivo");
-                    }
+                    // Mensaje genérico de confirmación de envío
+                    panelConsola.agregarLinea("Solicitud de edición enviada para: " + nombreSeleccionado);
                 }
             }
         }
@@ -216,4 +221,16 @@ private void crearDirectorio() {
              panelConsola.agregarLinea("Solicitud de PROCESO 'ELIMINAR' enviada para: " + nombreLimpio);
         }
     }
+    
+     //Modo admi 2
+    public void setModoProceso(boolean activar) {
+    btnProcesar.setEnabled(activar);
+    if (activar) {
+        setBorder(BorderFactory.createTitledBorder("Operaciones Batch (Modo Proceso)"));
+        btnProcesar.setBackground(Color.GREEN);
+    } else {
+        setBorder(BorderFactory.createTitledBorder("Operaciones CRUD (Admin Directo)"));
+        btnProcesar.setBackground(new Color(200, 255, 200));
+    }
+}
 }

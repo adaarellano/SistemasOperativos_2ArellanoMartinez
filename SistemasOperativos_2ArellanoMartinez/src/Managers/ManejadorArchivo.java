@@ -59,6 +59,10 @@ public class ManejadorArchivo {
     private PanelEstadisticas panelEstadisticas; // <-- AÑADIR
     private BufferManager bufferManager;
     
+    // === MODO PROCESAMIENTO POR LOTES (NUEVO) ===
+    private boolean esModoBatch = false; // "Modo Admin Proceso"
+    private ListaSimple bufferOperacionesPendientes; // Almacén temporal
+    
     public ManejadorArchivo() {
         inicializarSistema();
     }
@@ -74,6 +78,8 @@ public class ManejadorArchivo {
         for (int i = 0; i < totalBloques; i++) {
             bloquesDisco[i] = new Bloque(i);
         }
+        
+        
         
         // 2. Inicializar directorio raíz
         raiz = new Directorio("/");
@@ -101,6 +107,11 @@ public class ManejadorArchivo {
         
         // 7. Iniciar el hilo del planificador (¡NUEVO!)
         iniciarHiloPlanificador();
+        
+        usuarios = new ListaSimple();
+    
+        // NUEVO: Inicializar buffer
+        bufferOperacionesPendientes = new ListaSimple();
     }
     
     /**
@@ -562,7 +573,25 @@ public class ManejadorArchivo {
     // ===== GESTIÓN DE PROCESOS =====
     
     public void solicitarOperacion(String tipoOperacion, String ruta, String usuario, int tamaño) {
-        logConsola("🔄 SOLICITANDO OPERACIÓN: " + tipoOperacion + " " + ruta);
+        
+        // --- CORRECCIÓN: VERIFICAR MODO BATCH PRIMERO ---
+        // Si estamos en modo Batch, encolamos y NOS VAMOS (return)
+        if (esModoBatch) {
+            // Guardamos la intención
+            OperacionPendiente op = new OperacionPendiente(tipoOperacion, ruta, usuario, tamaño, "");
+            bufferOperacionesPendientes.insertFinal(op);
+            
+            logConsola("⏳ [PENDIENTE] Operación encolada: " + tipoOperacion + " " + ruta);
+            logConsola("   Total en espera: " + bufferOperacionesPendientes.getSize() + ". Presione 'PROCESAR COLA' para ejecutar.");
+            
+            // ¡ESTO ES LO QUE FALTABA!
+            // Detenemos la ejecución aquí para que no se cree el archivo inmediatamente.
+            return; 
+        }
+        // ------------------------------------------------
+        
+        // Si llegamos aquí, es porque es Modo Normal (Admin Directo)
+        logConsola("🔄 SOLICITANDO OPERACIÓN INMEDIATA: " + tipoOperacion + " " + ruta);
         Proceso proceso = new Proceso(tipoOperacion, ruta, usuario, tamaño);
         proceso.setManejadorArchivo(this);
         colaProcesos.insertFinal(proceso);
@@ -570,6 +599,75 @@ public class ManejadorArchivo {
         
         planificarProcesos();
     }
+    
+    // Sobrecarga para operaciones con datos (Editar)
+    public void solicitarOperacionEditar(String ruta, String datos, String usuario) {
+        
+        // --- CORRECCIÓN: VERIFICAR MODO BATCH PRIMERO ---
+        if (esModoBatch) {
+            OperacionPendiente op = new OperacionPendiente("ACTUALIZAR", ruta, usuario, 0, datos);
+            bufferOperacionesPendientes.insertFinal(op);
+            
+            logConsola("⏳ [PENDIENTE] Edición encolada. Presione 'PROCESAR COLA'.");
+            return; // ¡IMPORTANTE! Return para no ejecutar doble.
+        }
+        // ------------------------------------------------
+        
+        logConsola("🔄 SOLICITANDO EDICIÓN INMEDIATA: " + ruta);
+        
+        Proceso proceso = new Proceso("ACTUALIZAR", ruta, usuario, datos);
+        proceso.setManejadorArchivo(this);
+        colaProcesos.insertFinal(proceso); 
+        proceso.iniciar();                
+        
+        planificarProcesos();              
+    }
+    
+    /**
+     * Libera todas las operaciones acumuladas y las convierte en procesos
+     * para que el planificador (SCAN, SSTF, etc.) las ordene.
+     */
+    public void procesarLotePendiente() {
+        if (bufferOperacionesPendientes.isEmpty()) {
+            logConsola("⚠️ No hay operaciones pendientes para procesar.");
+            return;
+        }
+
+        logConsola("🚀 === INICIANDO PROCESAMIENTO POR LOTES (" + bufferOperacionesPendientes.getSize() + ") ===");
+        
+        // Convertir cada OperacionPendiente en un Proceso real
+        for (int i = 0; i < bufferOperacionesPendientes.getSize(); i++) {
+            OperacionPendiente op = (OperacionPendiente) bufferOperacionesPendientes.get(i);
+            
+            Proceso proceso;
+            if (op.getTipo().equals("ACTUALIZAR")) {
+                proceso = new Proceso(op.getTipo(), op.getRuta(), op.getUsuario(), op.getDatos());
+            } else {
+                proceso = new Proceso(op.getTipo(), op.getRuta(), op.getUsuario(), op.getTamano());
+            }
+            
+            proceso.setManejadorArchivo(this);
+            colaProcesos.insertFinal(proceso);
+            proceso.iniciar();
+        }
+        
+        // Limpiar el buffer
+        bufferOperacionesPendientes = new ListaSimple(); // Reiniciar lista
+        
+        // Despertar al planificador
+        planificarProcesos();
+    }
+
+    // Setter para el modo
+    public void setModoBatch(boolean activo) {
+        this.esModoBatch = activo;
+        // Si activamos el modo, limpiamos cualquier pendiente viejo por seguridad
+        if (activo) {
+            bufferOperacionesPendientes = new ListaSimple();
+        }
+    }
+    
+    
     
     private void planificarProcesos() {
         // --- NUEVO: Parte 1 - Limpiar procesos terminados ---
