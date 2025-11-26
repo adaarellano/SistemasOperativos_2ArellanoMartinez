@@ -1,8 +1,15 @@
 {
+<<<<<<< HEAD
   "archivosCreados": 4,
   "archivosEliminados": 1,
   "operacionesRealizadas": 13,
   "bloquesOcupados": 65,
+=======
+  "archivosCreados": 1,
+  "archivosEliminados": 0,
+  "operacionesRealizadas": 0,
+  "bloquesOcupados": 0,
+>>>>>>> ada
   "planificadorActual": "C-SCAN",
   "usuarioActual": "admin",
   "esModoAdministrador": true
