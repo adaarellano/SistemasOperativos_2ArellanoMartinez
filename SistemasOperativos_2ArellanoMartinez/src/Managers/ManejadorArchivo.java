@@ -5,990 +5,526 @@
 package Managers;
 
 import Models.*;
-import Planificador.FIFO;
-import Planificador.SSTF;
-import Planificador.SCAN;
-import Planificador.CSCAN;
-import Planificador.PlanificadorDisco;
+import Planificador.*;
 import edd.ListaSimple;
 import MainGUI.*;
-import MainGUI.PanelOutput;
-import java.util.*;
+import java.awt.Color;
 import javax.swing.SwingUtilities;
 
-/**
- * Manejador principal del sistema de archivos
- * Controla todo: archivos, directorios, procesos y planificación de disco
- * VERSIÓN MODIFICADA PARA INTERFAZ GRÁFICA
- */
 public class ManejadorArchivo {
     // === ALMACENAMIENTO ===
     private Bloque[] bloquesDisco;
-    private Directorio raiz;
     private int totalBloques = 100;
+    private Directorio raiz;
     
-    // === USUARIOS Y PERMISOS ===
-    private boolean esModoAdministrador = true;
-    private String usuarioActual = "admin";
-    private ListaSimple usuarios; // Lista de usuarios del sistema
-    
-    private PanelOutput panelOutput;
-    
-    // === PROCESOS ===
-    private ListaSimple colaProcesos;
-    private ListaSimple procesosActivos;
-    
-    // === PLANIFICACIÓN DE DISCO ===
-    private PlanificadorDisco planificadorActual;
-    private ListaSimple solicitudesDisco;
-    private int cabezalActual = 0; 
-    private Thread hiloDisco; 
+    // === SISTEMA ===
+    private boolean esModoAdministrador = false;
+    private Usuario usuarioActual;
+    private ListaSimple usuarios; 
     private volatile boolean sistemaActivo = true; 
+    private volatile boolean discoPausado = false; // MODO BATCH
+    
+    // === COMPONENTES ===
+    private ListaSimple colaProcesos;    
+    private ListaSimple procesosActivos; 
+    private PlanificadorDisco planificadorActual;
+    private int cabezalActual = 0; 
+    private BufferManager bufferManager;
     
     // === ESTADÍSTICAS ===
     private int archivosCreados = 0;
     private int archivosEliminados = 0;
     private int operacionesRealizadas = 0;
     
-    // === REFERENCIA A INTERFAZ ===
+    // === GUI ===
     private PanelConsola panelConsola;
     private PanelArchivos panelArchivos; 
     private PanelDisco panelDisco; 
     private PanelTablaAsignacion panelTablaAsignacion; 
     private PanelDetalles panelDetalles; 
-    private PanelEstadisticas panelEstadisticas; // <-- AÑADIR
-    private BufferManager bufferManager;
-    
+    private PanelEstadisticas panelEstadisticas;
+
+    // Hilos
+    private Thread hiloDisco;
+    private Thread hiloPlanificador;
+
     public ManejadorArchivo() {
         inicializarSistema();
     }
     
-    public ManejadorArchivo(PanelConsola panelConsola, BufferManager bufferManager) {
-        this.panelConsola = panelConsola;
-        inicializarSistema();
-    }
-    
     private void inicializarSistema() {
-        // 1. Inicializar disco
         bloquesDisco = new Bloque[totalBloques];
-        for (int i = 0; i < totalBloques; i++) {
-            bloquesDisco[i] = new Bloque(i);
-        }
+        for (int i = 0; i < totalBloques; i++) bloquesDisco[i] = new Bloque(i);
         
-        // 2. Inicializar directorio raíz
         raiz = new Directorio("/");
-        
-        // 3. Inicializar colas
         colaProcesos = new ListaSimple();
         procesosActivos = new ListaSimple();
-        solicitudesDisco = new ListaSimple(); // 'solicitudesDisco' aquí es un 'ListaSimple'
         usuarios = new ListaSimple();
         
-        // 4. Crear usuarios por defecto
         crearUsuariosPorDefecto();
+        this.usuarioActual = (Usuario) usuarios.get(1);
         
-        // 5. Inicializar planificador (FIFO por defecto)
-        // El 'setPanelConsola' lo inicializará correctamente
         planificadorActual = new FIFO(); 
         
-        // 6. Iniciar el hilo del disco
         iniciarHiloDisco(); 
-        
-        logConsola("=== SISTEMA DE ARCHIVOS INICIALIZADO ===");
-        logConsola("Total bloques: " + totalBloques);
-        logConsola("Planificador por defecto: FIFO");
-        logConsola("Modo inicial: Administrador");
-        
-        // 7. Iniciar el hilo del planificador (¡NUEVO!)
         iniciarHiloPlanificador();
+        logConsola("=== SISTEMA INICIALIZADO ===");
     }
     
-    /**
-     * Crea usuarios por defecto del sistema
-     */
     private void crearUsuariosPorDefecto() {
         usuarios.insertFinal(new Usuario("admin", "admin"));
         usuarios.insertFinal(new Usuario("usuario1", "usuario"));
-        usuarios.insertFinal(new Usuario("usuario2", "usuario"));
-        logConsola("Usuarios creados: admin, usuario1, usuario2");
     }
+
+    // =========================================================
+    //              MÉTODOS CRUD (PÚBLICOS)
+    // =========================================================
+    // Estos métodos ahora deciden si EJECUTAR YA o ENCOLAR
     
-    // ===== OPERACIONES PRINCIPALES DE ARCHIVOS =====
-    
-    /**
-     * Crea un nuevo archivo en el sistema - CON LOGS MEJORADOS
-     */
     public boolean crearArchivo(String ruta, int tamañoBloques, String usuario) {
-        logConsola("=== SOLICITANDO CREACIÓN DE ARCHIVO ===");
-        logConsola("Ruta: " + ruta);
-        logConsola("Tamaño solicitado: " + tamañoBloques + " bloques");
-        logConsola("Usuario: " + usuario);
+        if (!verificarPermisosEscritura(usuario)) return error("Sin permisos");
         
-        if (!verificarPermisosEscritura(usuario)) {
-            logConsola("❌ ERROR: Sin permisos para crear archivo");
-            return false;
+        if (discoPausado) {
+            // MODO PROCESO: Solo encolamos la intención
+            encolarSolicitudPendiente("CREATE", ruta, null, tamañoBloques, usuario);
+            return true;
         }
-        
-        if (!hayEspacioSuficiente(tamañoBloques)) {
-            logConsola("❌ ERROR: No hay espacio suficiente");
-            return false;
-        }
-        
-        try {
-            // Extraer directorio y nombre de archivo de la ruta
-            String[] partes = ruta.split("/");
-            String nombreArchivo = partes[partes.length - 1];
-            String rutaDirectorio = obtenerRutaDirectorio(ruta);
-            
-            logConsola("Buscando directorio: " + rutaDirectorio);
-            
-            // Buscar o crear directorio
-            Directorio directorioDestino = buscarOCrearDirectorio(rutaDirectorio);
-            if (directorioDestino == null) {
-                logConsola("❌ ERROR: No se pudo encontrar/crear el directorio");
-                return false;
-            }
-            
-            logConsola("Creando archivo: " + nombreArchivo);
-            // Crear archivo
-            Archivo nuevoArchivo = new Archivo(nombreArchivo, tamañoBloques, usuario, ruta);
-            
-            logConsola("Asignando " + tamañoBloques + " bloques...");
-            // Asignar bloques al archivo
-            if (!asignarBloquesArchivo(nuevoArchivo, tamañoBloques)) {
-                logConsola("❌ ERROR: No se pudieron asignar bloques");
-                return false;
-            }
-            
-            logConsola("Agregando archivo al directorio...");
-            // Agregar archivo al directorio
-            boolean exito = directorioDestino.agregarArchivo(nuevoArchivo);
-            if (exito) {
-                archivosCreados++;
-                operacionesRealizadas++;
-                
-                logConsola("✅ ARCHIVO CREADO EXITOSAMENTE");
-                logConsola("   Nombre: " + nombreArchivo);
-                logConsola("   Bloques reservados: " + tamañoBloques);
-                logConsola("   Cadena de bloques: " + nuevoArchivo.getInfoBloques());
-                
-                // Crear solicitud de disco para la operación
-                crearSolicitudDisco("CREATE", nuevoArchivo.getPrimerBloque().getIdBloque(), usuario);
-                
-                return true;
-            } else {
-                logConsola("❌ ERROR: No se pudo agregar el archivo al directorio");
-            }
-            
-        } catch (Exception e) {
-            logConsola("❌ ERROR EXCEPCIÓN: " + e.getMessage());
-        }
-        
-        return false;
+        // MODO NORMAL: Ejecutamos lógica inmediata
+        return ejecutarLogicaCrearArchivo(ruta, tamañoBloques, usuario);
     }
     
-    /**
-     * Lee el contenido de un archivo - CON LOGS MEJORADOS
-     */
-   public String leerArchivo(String ruta, String usuario) {
-        logConsola("=== SOLICITANDO LECTURA DE ARCHIVO ===");
-        logConsola("Ruta: " + ruta);
-        logConsola("Usuario: " + usuario);
-
-        if (!verificarPermisosLectura(usuario)) {
-            logConsola("❌ ERROR: Acceso denegado");
-            return "Acceso denegado";
+    public boolean crearDirectorio(String ruta, String usuario) {
+        if (!verificarPermisosEscritura(usuario)) return error("Sin permisos");
+        
+        if (discoPausado) {
+            encolarSolicitudPendiente("CREATE_DIR", ruta, null, 0, usuario);
+            return true;
         }
-
+        return ejecutarLogicaCrearDirectorio(ruta);
+    }
+    
+    public boolean actualizarArchivo(String ruta, String datos, String usuario) {
+        if (!verificarPermisosEscritura(usuario)) return false;
+        
+        if (discoPausado) {
+            encolarSolicitudPendiente("UPDATE", ruta, datos, 0, usuario);
+            return true;
+        }
+        return ejecutarLogicaActualizarArchivo(ruta, datos, usuario);
+    }
+    
+    public boolean renombrarDirectorio(String ruta, String nuevoNombre, String usuario) {
+        if (!verificarPermisosEscritura(usuario)) return false;
+        
+        if (discoPausado) {
+            encolarSolicitudPendiente("RENAME", ruta, nuevoNombre, 0, usuario);
+            return true;
+        }
+        return ejecutarLogicaRenombrar(ruta, nuevoNombre);
+    }
+    
+    public boolean eliminarArchivo(String ruta, String usuario) {
+        if (!verificarPermisosEscritura(usuario)) return false;
+        
+        if (discoPausado) {
+            // Determinamos si es DIR o FILE para saber qué tipo poner, 
+            // aunque ELIMINAR genérico funcionaría si la lógica lo maneja.
+            // Por simplicidad, usaremos DELETE para ambos y la lógica resolverá.
+            encolarSolicitudPendiente("DELETE", ruta, null, 0, usuario);
+            return true;
+        }
+        return ejecutarLogicaEliminar(ruta, usuario);
+    }
+    
+    public String leerArchivo(String ruta, String usuario) {
+        // La lectura siempre intenta ser inmediata para devolver datos,
+        // pero si hay cola, se simula el retraso.
+        if (!verificarPermisosLectura(usuario)) return null;
+        
         Archivo archivo = buscarArchivo(ruta);
-        if (archivo == null) {
-            logConsola("❌ ERROR: Archivo no encontrado");
-            return "Archivo no encontrado: " + ruta;
-        }
-
-        // ... (resto de verificaciones de permisos si las tienes) ...
-
-        logConsola("Archivo encontrado: " + archivo.getNombre());
-        logConsola("Tamaño: " + archivo.getTamañoBytes() + " bytes");
-
-        // --- ¡LÓGICA DEL BUFFER! ---
-        // Por simplicidad, solo comprobamos el primer bloque del archivo.
+        if (archivo == null) return null;
         
-        Bloque primerBloque = archivo.getPrimerBloque();
-        
-        if (primerBloque != null) {
-            // 1. Preguntar al buffer primero
-            Bloque bloqueEnCache = bufferManager.leerBloque(primerBloque.getIdBloque());
-            
-            if (bloqueEnCache != null) {
-                // ¡CACHE HIT! No necesitamos ir al disco.
-                logConsola("✅ CACHE HIT: Datos leídos desde RAM (Buffer). Rápido.");
-                operacionesRealizadas++;
-                return archivo.leerContenido(); // Devolver contenido al instante
-            }
+        // Buffer check
+        Bloque primer = archivo.getPrimerBloque();
+        if (primer != null && bufferManager != null && bufferManager.leerBloque(primer.getIdBloque()) != null) {
+            logConsola("✅ [Buffer] CACHE HIT!");
+            return archivo.leerContenido();
         }
         
-        // ¡CACHE MISS! El bloque no está en el buffer.
-        // Debemos solicitarlo al disco (lento).
-        logConsola("❌ CACHE MISS: Datos no encontrados en RAM. Solicitando E/S al disco...");
-        
-        // Crear solicitud de disco para lectura (Este es el flujo lento)
-        if (archivo.getPrimerBloque() != null) {
-            crearSolicitudDisco("READ", archivo.getPrimerBloque().getIdBloque(), usuario);
-        }
-
-        operacionesRealizadas++;
+        // Si no está en buffer, creamos solicitud de lectura
+        crearSolicitudDisco("READ", (primer!=null?primer.getIdBloque():0), usuario);
         return archivo.leerContenido();
     }
+
+    // =========================================================
+    //              LÓGICA INTERNA DE EJECUCIÓN
+    // =========================================================
+    // Estos métodos hacen el trabajo real sobre el árbol y el disco
     
-    /**
-     * Actualiza el contenido de un archivo - CON LOGS MEJORADOS
-     */
-    public boolean actualizarArchivo(String ruta, String datos, String usuario) {
-        logConsola("=== SOLICITANDO ACTUALIZACIÓN DE ARCHIVO ===");
-        logConsola("Ruta: " + ruta);
-        logConsola("Usuario: " + usuario);
-        logConsola("Nuevos datos (" + datos.length() + " caracteres)");
+    private boolean ejecutarLogicaCrearArchivo(String ruta, int tamaño, String usuario) {
+        if (!hayEspacioSuficiente(tamaño)) return error("Disco lleno");
         
-        if (!verificarPermisosEscritura(usuario)) {
-            logConsola("❌ ERROR: Sin permisos de escritura");
-            return false;
+        // Buscar padre
+        String nombre = getNombreDesdeRuta(ruta);
+        String rutaPadre = getPadreDesdeRuta(ruta);
+        Directorio destino = (rutaPadre.equals("/")) ? raiz : raiz.buscarDirectorioRecursivo(rutaPadre);
+        
+        if (destino == null) return error("Directorio destino no existe");
+        
+        Archivo nuevo = new Archivo(nombre, tamaño, usuario, ruta);
+        if (!asignarBloquesArchivo(nuevo, tamaño)) return error("Fallo asignación bloques");
+        
+        // En modo normal, se confirma de una. En batch, se confirmará al procesar.
+        nuevo.setConfirmadoEnDisco(true); 
+        
+        if (destino.agregarArchivo(nuevo)) {
+            archivosCreados++;
+            logConsola("✅ ARCHIVO CREADO: " + nombre);
+            // Solicitud VISUAL (Ya la lógica se hizo)
+            crearSolicitudDisco("CREATE", nuevo.getPrimerBloque().getIdBloque(), usuario);
+            if (!discoPausado) actualizarGUICompleta();
+            return true;
         }
-        
-        Archivo archivo = buscarArchivo(ruta);
-        if (archivo == null) {
-            logConsola("❌ ERROR: Archivo no encontrado");
-            return false;
-        }
-        
-        if (!archivo.getUsuarioPropietario().equals(usuario) && !esModoAdministrador) {
-            logConsola("❌ ERROR: No tiene permisos para modificar este archivo");
-            return false;
-        }
-        
-        logConsola("Archivo encontrado: " + archivo.getNombre());
-        
-        boolean exito = archivo.escribirContenido(datos);
-        if (exito) {
-            logConsola("✅ ARCHIVO ACTUALIZADO EXITOSAMENTE");
-            logConsola("   Nuevo tamaño: " + archivo.getTamañoBytes() + " bytes");
-            logConsola("   Bloques usados: " + archivo.getTamañoBloques() + "/" + archivo.getBloquesReservados());
-            
-            // Crear solicitud de disco para escritura
-            if (archivo.getPrimerBloque() != null) {
-                crearSolicitudDisco("WRITE", archivo.getPrimerBloque().getIdBloque(), usuario);
-            }
-            
-            operacionesRealizadas++;
-        } else {
-            logConsola("❌ ERROR: No se pudo actualizar el archivo");
-        }
-        
-        return exito;
+        return false;
     }
     
-    /**
-     * Elimina un archivo del sistema - CON LOGS MEJORADOS
-     */
-    public boolean eliminarArchivo(String ruta, String usuario) {
-        logConsola("=== SOLICITANDO ELIMINACIÓN DE ARCHIVO ===");
-        logConsola("Ruta: " + ruta);
-        logConsola("Usuario: " + usuario);
+    private boolean ejecutarLogicaCrearDirectorio(String ruta) {
+        String nombre = getNombreDesdeRuta(ruta);
+        String rutaPadre = getPadreDesdeRuta(ruta);
+        Directorio padre = (rutaPadre.equals("/")) ? raiz : raiz.buscarDirectorioRecursivo(rutaPadre);
         
-        if (!verificarPermisosEscritura(usuario)) {
-            logConsola("❌ ERROR: Sin permisos de escritura");
-            return false;
-        }
-        
-        try {
-            String[] partes = ruta.split("/");
-            String nombreArchivo = partes[partes.length - 1];
-            String rutaDirectorio = obtenerRutaDirectorio(ruta);
-            
-            logConsola("Buscando directorio: " + rutaDirectorio);
-            Directorio directorio = raiz.buscarDirectorioRecursivo(rutaDirectorio);
-            if (directorio == null) {
-                logConsola("❌ ERROR: Directorio no encontrado");
-                return false;
-            }
-            
-            logConsola("Buscando archivo: " + nombreArchivo);
-            Archivo archivo = directorio.buscarArchivo(nombreArchivo);
-            if (archivo == null) {
-                logConsola("❌ ERROR: Archivo no encontrado");
-                return false;
-            }
-            
-            if (!archivo.getUsuarioPropietario().equals(usuario) && !esModoAdministrador) {
-                logConsola("❌ ERROR: No tiene permisos para eliminar este archivo");
-                return false;
-            }
-            
-            logConsola("Liberando bloques del archivo...");
-            // Liberar bloques del archivo
-            liberarBloquesArchivo(archivo);
-            
-            logConsola("Eliminando archivo del directorio...");
-            // Eliminar archivo del directorio
-            boolean exito = directorio.eliminarArchivo(nombreArchivo);
-            if (exito) {
-                archivosEliminados++;
-                operacionesRealizadas++;
-                
-                logConsola("✅ ARCHIVO ELIMINADO EXITOSAMENTE");
-                logConsola("   Nombre: " + nombreArchivo);
-                logConsola("   Bloques liberados: " + archivo.getBloquesReservados());
-                
-                // Crear solicitud de disco para eliminación
-                crearSolicitudDisco("DELETE", 0, usuario);
-                
+        if (padre != null) {
+            if (padre.crearSubdirectorio(nombre) != null) {
+                logConsola("✅ DIRECTORIO CREADO: " + nombre);
+                if (!discoPausado) actualizarGUICompleta();
+                // Los directorios no ocupan bloques, no mandamos solicitud de disco visual
                 return true;
-            } else {
-                logConsola("❌ ERROR: No se pudo eliminar el archivo del directorio");
-            }
-            
-        } catch (Exception e) {
-            logConsola("❌ ERROR EXCEPCIÓN: " + e.getMessage());
-        }
-        
-        return false;
-    }
-    
-    // ===== GESTIÓN DE BLOQUES =====
-    
-    /**
-     * Asigna bloques a un archivo usando asignación encadenada - CON LOGS
-     */
-    private boolean asignarBloquesArchivo(Archivo archivo, int cantidadBloques) {
-        logConsola("Asignando " + cantidadBloques + " bloques...");
-        
-        if (cantidadBloques <= 0) {
-            logConsola("❌ ERROR: Cantidad de bloques inválida");
-            return false;
-        }
-        
-        ListaSimple bloquesAsignados = new ListaSimple();
-        
-        // Buscar bloques libres
-        for (int i = 0; i < bloquesDisco.length && bloquesAsignados.getSize() < cantidadBloques; i++) {
-            if (bloquesDisco[i].estaLibre()) {
-                bloquesAsignados.insertFinal(bloquesDisco[i]);
             }
         }
-        
-        // Verificar si encontramos suficientes bloques
-        if (bloquesAsignados.getSize() < cantidadBloques) {
-            logConsola("❌ ERROR: Solo " + bloquesAsignados.getSize() + " bloques libres de " + cantidadBloques + " requeridos");
-            return false;
-        }
-        
-        // Configurar la cadena de bloques
-        Bloque primerBloque = (Bloque) bloquesAsignados.get(0);
-        archivo.setPrimerBloque(primerBloque);
-        
-        Bloque actual = primerBloque;
-        for (int i = 1; i < bloquesAsignados.getSize(); i++) {
-            Bloque siguiente = (Bloque) bloquesAsignados.get(i);
-            actual.setSiguienteBloque(siguiente);
-            actual = siguiente;
-        }
-        
-
-        // Marcar bloques como ocupados
-        for (int i = 0; i < bloquesAsignados.getSize(); i++) {
-            Bloque bloque = (Bloque) bloquesAsignados.get(i);
-            
-            // AHORA PASAMOS EL COLOR DEL ARCHIVO
-            bloque.ocuparBloque(archivo.getNombre(), -1, archivo.getColor());
-        }
-
-        logConsola("✅ " + cantidadBloques + " bloques asignados exitosamente");
-        return true;
-    }
-
-    /**
-     * Inicia el hilo del "Demonio de Disco".
-     * Este hilo se ejecuta en segundo plano, revisa la cola de solicitudes
-     * y le pide al planificador actual cuál procesar a continuación.
-     */
-    private void iniciarHiloDisco() {
-        hiloDisco = new Thread(() -> {
-            logConsola("💿 Hilo del disco iniciado. Esperando solicitudes...");
-            
-            while (sistemaActivo) {
-                try {
-                    // 1. Pedir la siguiente solicitud al planificador
-                    SolicitudDisco solicitud = planificadorActual.obtenerSiguiente();
-                    
-                    if (solicitud != null) {
-                        // 2. Si hay una, procesarla
-                        procesarSolicitudDisco(solicitud); // Llama a la NUEVA versión
-                    } else {
-                        // 3. Si no hay, esperar un momento
-                        Thread.sleep(500); // Espera si la cola está vacía
-                    }
-                    
-                } catch (InterruptedException e) {
-                    if (sistemaActivo) logConsola("Hilo del disco interrumpido.");
-                    sistemaActivo = false;
-                } catch (Exception e) {
-                    logConsola("❌ Error en el hilo del disco: " + e.getMessage());
-                }
-            }
-            logConsola("💿 Hilo del disco detenido.");
-        });
-        
-        hiloDisco.setName("Disco-Scheduler-Thread");
-        hiloDisco.setDaemon(true); 
-        hiloDisco.start();
+        return error("Error al crear directorio");
     }
     
-    /**
-     * Libera los bloques asignados a un archivo - CON LOGS
-     */
-    private void liberarBloquesArchivo(Archivo archivo) {
-        Bloque actual = archivo.getPrimerBloque();
-        int bloquesLiberados = 0;
-        
-        while (actual != null) {
-            actual.liberarBloque();
-            bloquesLiberados++;
-            actual = actual.getSiguienteBloque();
-        }
-        
-        logConsola("✅ " + bloquesLiberados + " bloques liberados");
-    }
-    
-    /**
-     * Verifica si hay espacio suficiente en el disco
-     */
-    private boolean hayEspacioSuficiente(int tamañoNecesario) {
-        int bloquesLibres = 0;
-        for (Bloque bloque : bloquesDisco) {
-            if (bloque.estaLibre()) {
-                bloquesLibres++;
-            }
-        }
-        
-        logConsola("Bloques libres: " + bloquesLibres + "/" + totalBloques);
-        logConsola("Bloques necesarios: " + tamañoNecesario);
-        
-        return bloquesLibres >= tamañoNecesario;
-    }
-    
-    // ===== GESTIÓN DE SOLICITUDES DE DISCO =====
-    
-    /**
-     * Crea una nueva solicitud de disco y la AÑADE A LA COLA del planificador.
-     * Ya NO la procesa directamente.
-     */
-    private void crearSolicitudDisco(String tipoOperacion, int bloque, String usuario) {
-        logConsola("📋 ENCOLANDO SOLICLITUD DE DISCO");
-        logConsola("   Tipo: " + tipoOperacion);
-        logConsola("   Bloque: " + bloque);
-        logConsola("   Planificador: " + planificadorActual.getNombrePolitica());
-
-        // El constructor de SolicitudDisco pide un Proceso.
-        Proceso dummyProceso = new Proceso(tipoOperacion, "ruta_desconocida", usuario);
-        SolicitudDisco nuevaSolicitud = new SolicitudDisco(dummyProceso, tipoOperacion, bloque);
-        
-        // Añadir la solicitud al planificador activo
-        planificadorActual.agregarSolicitud(nuevaSolicitud);
-        
-        logConsola("   ✅ Solicitud ENCOLADA. (El planificador decidirá...)");
-        logConsola("   Solicitudes pendientes: " + planificadorActual.getSolicitudesPendientes().getSize());
-    }
-    
-    /**
-     * Procesa UNA solicitud de disco específica. (NUEVA VERSIÓN)
-     * Este método es llamado por el hiloDisco, NO directamente.
-     */
-    private void procesarSolicitudDisco(SolicitudDisco solicitud) {
-        if (solicitud == null) return;
-        
-        logConsola("⚡ PROCESANDO SOLICITUD (Decidido por " + planificadorActual.getNombrePolitica() + ")");
-        logConsola("   Operación: " + solicitud.getTipoOperacion());
-        logConsola("   Bloque objetivo: " + solicitud.getBloqueSolicitado());
-        
-        // Calcular distancia y mover cabezal
-        int distancia = Math.abs(solicitud.getBloqueSolicitado() - this.cabezalActual);
-        this.cabezalActual = solicitud.getBloqueSolicitado();
-        
-        logConsola("   Cabezal se mueve a: " + this.cabezalActual + " (Distancia: " + distancia + ")");
-        
-        // Simular tiempo de E/S
-        try {
-            logConsola("   Simulando tiempo de E/S...");
-            Thread.sleep(8000); // 800ms de tiempo de acceso
-            
-            // --- ¡AQUÍ ESTÁ TU LÓGICA DE BUFFER! ---
-            // Si fue una lectura (un CACHE MISS), ahora llenamos el caché.
-            if (solicitud.getTipoOperacion().equals("READ")) {
-                Bloque bloqueLeido = bloquesDisco[solicitud.getBloqueSolicitado()];
-                if (bufferManager != null) {
-                    bufferManager.agregarBloque(bloqueLeido);
-                }
-            }
-            
-            logConsola("   ✅ Operación completada en bloque " + this.cabezalActual);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            logConsola("   ❌ Operación interrumpida");
-        }
-    }
-    
-    // ===== MÉTODOS DE LOGGING MEJORADOS =====
-    
-    /**
-     * Método para enviar mensajes a la consola
-     */
-    private void logConsola(String mensaje) {
-        if (panelConsola != null) {
-            panelConsola.agregarLinea(mensaje);
-        } else {
-            System.out.println(mensaje); // Fallback a consola normal
-        }
-        
-        // Pequeña pausa para ver línea por línea en la interfaz
-        try {
-            Thread.sleep(100);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
-    
-    // ===== EL RESTO DE LOS MÉTODOS SE MANTIENEN IGUAL =====
-    
-    // ===== GESTIÓN DE PROCESOS =====
-    
-    public void solicitarOperacion(String tipoOperacion, String ruta, String usuario, int tamaño) {
-        logConsola("🔄 SOLICITANDO OPERACIÓN: " + tipoOperacion + " " + ruta);
-        Proceso proceso = new Proceso(tipoOperacion, ruta, usuario, tamaño);
-        proceso.setManejadorArchivo(this);
-        colaProcesos.insertFinal(proceso);
-        proceso.iniciar();
-        
-        planificarProcesos();
-    }
-    
-    private void planificarProcesos() {
-        // --- NUEVO: Parte 1 - Limpiar procesos terminados ---
-        // Recorremos la lista de activos para "limpiar" los que ya terminaron
-        for (int i = 0; i < procesosActivos.getSize(); i++) {
-            Proceso p = (Proceso) procesosActivos.get(i);
-            if (p.estaTerminado()) {
-                logConsola("♻️ Limpiando proceso terminado: " + p.getNombre());
-                procesosActivos.remove(p);
-                i--; // Ajustar el índice después de eliminar
-                actualizarGUICompleta();
-            }
-        }
-
-        // --- Parte 2 - Planificar nuevos procesos (Tu código original) ---
-        // Lógica simple de planificación: tomar el primer proceso listo
-        for (int i = 0; i < colaProcesos.getSize(); i++) {
-            Proceso proceso = (Proceso) colaProcesos.get(i);
-            
-            // Con el Arreglo 1, esto ahora devolverá true
-            if (proceso.estaListo()) { 
-                proceso.setEstado(Proceso.Estado.EJECUTANDO);
-                proceso.permitirEjecucion();
-                
-                // Mover a procesos activos
-                procesosActivos.insertFinal(proceso);
-                colaProcesos.remove(proceso);
-                logConsola("📊 Proceso en ejecución: " + proceso.getNombre());
-                break; // Solo planifica uno a la vez (simple)
-            }
-        }
-    }
-    
-    // ===== BÚSQUEDAS Y NAVEGACIÓN =====
-    
-    /**
-     * Busca un archivo por ruta completa
-     */
-    public Archivo buscarArchivo(String ruta) {
-        String[] partes = ruta.split("/");
-        String nombreArchivo = partes[partes.length - 1];
-        String rutaDirectorio = obtenerRutaDirectorio(ruta);
-        
-        Directorio directorio = raiz.buscarDirectorioRecursivo(rutaDirectorio);
-        if (directorio != null) {
-            return directorio.buscarArchivo(nombreArchivo);
-        }
-        
-        return null;
-    }
-    
-    /**
-     * Busca o crea un directorio en la ruta especificada
-     */
-    private Directorio buscarOCrearDirectorio(String ruta) {
-        if (ruta == null || ruta.isEmpty() || ruta.equals("/")) {
-            return raiz;
-        }
-        
-        Directorio directorio = raiz.buscarDirectorioRecursivo(ruta);
-        if (directorio != null) {
-            return directorio;
-        }
-        
-        // Crear directorios recursivamente
-        String[] partes = ruta.split("/");
-        Directorio actual = raiz;
-        
-        for (String nombreDir : partes) {
-            if (nombreDir.isEmpty()) continue;
-            
-            Directorio subdir = actual.buscarSubdirectorio(nombreDir);
-            if (subdir == null) {
-                subdir = actual.crearSubdirectorio(nombreDir);
-                if (subdir == null) {
-                    return null;
-                }
-            }
-            actual = subdir;
-        }
-        
-        return actual;
-    }
-    
-    /**
-     * Extrae la ruta del directorio de una ruta completa de archivo
-     */
-    private String obtenerRutaDirectorio(String rutaArchivo) {
-        int lastSlash = rutaArchivo.lastIndexOf('/');
-        if (lastSlash <= 0) {
-            return "/";
-        }
-        return rutaArchivo.substring(0, lastSlash);
-    }
-    
-    // ===== VERIFICACIÓN DE PERMISOS =====
-    
-    private boolean verificarPermisosLectura(String usuario) {
-        return esModoAdministrador || buscarUsuario(usuario) != null;
-    }
-    
-    private boolean verificarPermisosEscritura(String usuario) {
-        return esModoAdministrador;
-    }
-    
-    private Usuario buscarUsuario(String username) {
-        for (int i = 0; i < usuarios.getSize(); i++) {
-            Usuario usuario = (Usuario) usuarios.get(i);
-            if (usuario.getUsername().equals(username)) {
-                return usuario;
-            }
-        }
-        return null;
-    }
-    
-    // ===== CONFIGURACIÓN DEL SISTEMA =====
-    
-    public void setModoAdministrador(boolean esAdmin) {
-        this.esModoAdministrador = esAdmin;
-        this.usuarioActual = esAdmin ? "admin" : "usuario1";
-        logConsola("=== CAMBIO DE MODO ===");
-        logConsola("Nuevo modo: " + (esAdmin ? "ADMINISTRADOR" : "USUARIO"));
-        logConsola("Usuario actual: " + usuarioActual);
-    }
-    
-    public void cambiarPlanificador(String tipoPlanificador) {
-        logConsola("=== CAMBIANDO PLANIFICADOR ===");
-        logConsola("Planificador anterior: " + planificadorActual.getNombrePolitica());
-        logConsola("Cabezal actual en: " + this.cabezalActual);
-
-        // Guardar la cola de solicitudes pendientes
-        ListaSimple pendientes = planificadorActual.getSolicitudesPendientes();
-        
-        switch(tipoPlanificador.toUpperCase()) {
-            case "FIFO":
-                planificadorActual = new FIFO(panelConsola);
-                logConsola("Nuevo planificador: FIFO (First-In-First-Out)");
-                break;
-            case "SSTF":
-                planificadorActual = new SSTF(panelConsola);
-                logConsola("Nuevo planificador: SSTF (Shortest Seek Time First)");
-                break;
-            case "SCAN":
-                planificadorActual = new SCAN();
-                logConsola("Nuevo planificador: SCAN (Elevator Algorithm)");
-                break;
-            case "C-SCAN":
-                planificadorActual = new CSCAN();
-                logConsola("Nuevo planificador: C-SCAN (Circular SCAN)");
-                break;
-            default:
-                logConsola("❌ ERROR: Planificador no válido: " + tipoPlanificador);
-                return;
-        }
-        
-        // Restaurar el estado al nuevo planificador
-        planificadorActual.setCabezalActual(this.cabezalActual);
-        
-        // Volver a encolar las solicitudes pendientes
-        if (pendientes != null && !pendientes.isEmpty()) {
-            logConsola("...Moviendo " + pendientes.getSize() + " solicitudes pendientes al nuevo planificador...");
-            for (int i = 0; i < pendientes.getSize(); i++) {
-                planificadorActual.agregarSolicitud((SolicitudDisco) pendientes.get(i));
-            }
-        }
-        
-        logConsola("✅ Planificador cambiado exitosamente a " + planificadorActual.getNombrePolitica());
-    }
-    
-    // ===== GETTERS PARA LA INTERFAZ GRÁFICA =====
-    
-    public Bloque[] getBloquesDisco() {
-        return bloquesDisco;
-    }
-    
-    public Directorio getRaiz() {
-        return raiz;
-    }
-    
-    public ListaSimple getProcesosActivos() {
-        return procesosActivos;
-    }
-    
-    public ListaSimple getColaProcesos() {
-        return colaProcesos;
-    }
-    
-    public ListaSimple getSolicitudesDisco() {
-        return solicitudesDisco;
-    }
-    
-    public PlanificadorDisco getPlanificadorActual() {
-        return planificadorActual;
-    }
-    
-    public boolean esAdministrador() {
-        return esModoAdministrador;
-    }
-    
-    public String getUsuarioActual() {
-        return usuarioActual;
-    }
-    
-    public int getTotalBloques() {
-        return totalBloques;
-    }
-    
-    public int getBloquesOcupados() {
-        int ocupados = 0;
-        for (Bloque bloque : bloquesDisco) {
-            if (bloque.estaOcupado()) {
-                ocupados++;
-            }
-        }
-        return ocupados;
-    }
-    
-     public void setPanelOutput(PanelOutput panelOutput) {
-        this.panelOutput = panelOutput;
-    }
-     
-     public void setPanelEstadisticas(PanelEstadisticas panel) {
-    this.panelEstadisticas = panel;
-    }
-    
-    public int getArchivosCreados() {
-        return archivosCreados;
-    }
-    
-    public int getOperacionesRealizadas() {
-        return operacionesRealizadas;
-    }
-    
-    // ===== SETTER PARA PANEL CONSOLA =====
-    
-    public void setPanelConsola(PanelConsola panelConsola) {
-        this.panelConsola = panelConsola;
-        // Ahora 'panelConsola' no es null, por lo que esto es seguro.
-        if (this.bufferManager == null) {
-            this.bufferManager = new BufferManager(this.panelConsola);
-        }
-    }
-    
-        /**
-     * Fuerza una actualización de todos los paneles de la GUI.
-     */
-    private void actualizarGUICompleta() {
-        if (panelArchivos != null) panelArchivos.actualizarArbol();
-        if (panelDisco != null) panelDisco.actualizarDisco();
-        if (panelTablaAsignacion != null) panelTablaAsignacion.actualizarTabla();
-        if (panelDetalles != null) panelDetalles.actualizarDetalles();
-        if (panelEstadisticas != null) panelEstadisticas.actualizarGrafica();
-    }
-    
-    public void setPanelArchivos(PanelArchivos panel) {
-    this.panelArchivos = panel;
-    }
-
-    public void setPanelDisco(PanelDisco panel) {
-        this.panelDisco = panel;
-    }
-
-    public void setPanelTablaAsignacion(PanelTablaAsignacion panel) {
-        this.panelTablaAsignacion = panel;
-    }
-
-    public void setPanelDetalles(PanelDetalles panel) {
-        this.panelDetalles = panel;
-    }
-
-    // ===== INFORMACIÓN DEL SISTEMA =====
-    
-    public String getEstadoSistema() {
-        return String.format("=== ESTADO DEL SISTEMA ===\n" +
-            "Usuario: %s (%s)\n" +
-            "Archivos creados: %d\n" +
-            "Archivos eliminados: %d\n" +
-            "Operaciones realizadas: %d\n" +
-            "Bloques ocupados: %d/%d\n" +
-            "Planificador: %s\n" +
-            "Procesos activos: %d\n" +
-            "Procesos en cola: %d",
-            usuarioActual, esModoAdministrador ? "Admin" : "Usuario",
-            archivosCreados, getArchivosEliminados(), operacionesRealizadas,
-            getBloquesOcupados(), totalBloques,
-            planificadorActual.getNombrePolitica(),
-            procesosActivos.getSize(), colaProcesos.getSize()
-        );
-    }
-    
-    /**
-     * Método para mostrar detalles en el panel output
-     */
-    private void mostrarDetallesArchivo(Archivo archivo) {
-        if (panelOutput != null) {
-            panelOutput.mostrarDetallesArchivo(
-                archivo.getNombre(),
-                archivo.getTamañoBytes(),
-                archivo.getTamañoReservadoBytes(),
-                archivo.getTamañoBloques(),
-                archivo.getBloquesReservados(),
-                archivo.getInfoBloques()
-            );
-        }
-    }
-    
-  /**
-     * Crea un directorio en el sistema.
-     * Los directorios son lógicos y no ocupan bloques en esta simulación.
-     */
-    public boolean crearDirectorio(String ruta, String usuario) {
-        logConsola("=== SOLICITANDO CREACIÓN DE DIRECTORIO ===");
-        logConsola("Ruta objetivo: " + ruta);
-        
-        if (!verificarPermisosEscritura(usuario)) {
-            logConsola("❌ ERROR: Sin permisos");
-            return false;
-        }
-        
-        try {
-            // 1. Separar el nombre del nuevo directorio de la ruta de su padre
-            // Ej: "/arellano/fotos" -> Padre: "/arellano", Nuevo: "fotos"
-            String nombreNuevoDir;
-            String rutaPadre;
-            
-            int ultimoSlash = ruta.lastIndexOf('/');
-            if (ultimoSlash == 0) {
-                // Caso especial: Crear en la raíz (ej: "/fotos")
-                rutaPadre = "/";
-                nombreNuevoDir = ruta.substring(1);
-            } else {
-                rutaPadre = ruta.substring(0, ultimoSlash);
-                nombreNuevoDir = ruta.substring(ultimoSlash + 1);
-            }
-            
-            logConsola("Buscando Padre: '" + rutaPadre + "' para crear Hijo: '" + nombreNuevoDir + "'");
-            
-            // 2. Buscar DIRECTAMENTE el directorio padre usando la raíz
-            // Usamos el método que ya arreglamos en Directorio.java
-            Directorio padre;
-            if (rutaPadre.equals("/")) {
-                padre = raiz;
-            } else {
-                padre = raiz.buscarDirectorioRecursivo(rutaPadre);
-            }
-            
-            if (padre != null) {
-                // 3. Crear el subdirectorio
-                Directorio nuevo = padre.crearSubdirectorio(nombreNuevoDir);
-                if (nuevo != null) {
-                    archivosCreados++; // Opcional: contar directorios
-                    operacionesRealizadas++;
-                    logConsola("✅ DIRECTORIO CREADO: " + nombreNuevoDir + " en " + padre.getNombre());
-                    return true;
-                } else {
-                    logConsola("❌ ERROR: El directorio '" + nombreNuevoDir + "' ya existe en '" + padre.getNombre() + "'");
-                }
-            } else {
-                logConsola("❌ ERROR: No se encontró el directorio padre: " + rutaPadre);
-            }
-        } catch (Exception e) {
-            logConsola("❌ ERROR EXCEPCIÓN: " + e.getMessage());
-            e.printStackTrace();
+    private boolean ejecutarLogicaActualizarArchivo(String ruta, String datos, String usuario) {
+        Archivo archivo = buscarArchivo(ruta);
+        if (archivo != null) {
+            archivo.escribirContenido(datos);
+            logConsola("✅ ARCHIVO ACTUALIZADO: " + archivo.getNombre());
+            int bloque = (archivo.getPrimerBloque() != null) ? archivo.getPrimerBloque().getIdBloque() : 0;
+            crearSolicitudDisco("UPDATE", bloque, usuario);
+            if (!discoPausado) actualizarGUICompleta();
+            return true;
         }
         return false;
     }
     
-    public boolean renombrarDirectorio(String rutaCompleta, String nuevoNombre, String usuario) {
-        logConsola("=== SOLICITANDO RENOMBRADO DE DIRECTORIO ===");
-        
-        if (!verificarPermisosEscritura(usuario)) {
-            logConsola("❌ ERROR: Sin permisos");
-            return false;
-        }
-        
-        // Buscar el directorio
-        Directorio dir = buscarOCrearDirectorio(rutaCompleta); // Esto busca el existente
-        
+    private boolean ejecutarLogicaRenombrar(String ruta, String nuevoNombre) {
+        Directorio dir = (ruta.equals("/")) ? raiz : raiz.buscarDirectorioRecursivo(ruta);
         if (dir != null && !dir.esRaiz()) {
-            String nombreAnterior = dir.getNombre();
             dir.setNombre(nuevoNombre);
-            
-            operacionesRealizadas++;
-            logConsola("✅ DIRECTORIO RENOMBRADO: " + nombreAnterior + " -> " + nuevoNombre);
-            actualizarGUICompleta(); // Refrescar el árbol
+            logConsola("✅ RENOMBRADO: " + nuevoNombre);
+            if (!discoPausado) actualizarGUICompleta();
+            return true;
+        }
+        return false;
+    }
+    
+    private boolean ejecutarLogicaEliminar(String ruta, String usuario) {
+        String nombre = getNombreDesdeRuta(ruta);
+        String padrePath = getPadreDesdeRuta(ruta);
+        Directorio padre = (padrePath.equals("/")) ? raiz : raiz.buscarDirectorioRecursivo(padrePath);
+        
+        if (padre == null) return false;
+        
+        // Intentar borrar archivo
+        Archivo arch = padre.buscarArchivo(nombre);
+        if (arch != null) {
+            liberarBloquesArchivo(arch);
+            padre.eliminarArchivo(nombre);
+            archivosEliminados++;
+            crearSolicitudDisco("DELETE", 0, usuario);
+            logConsola("✅ ELIMINADO: " + nombre);
+            if (!discoPausado) actualizarGUICompleta();
             return true;
         }
         
-        logConsola("❌ ERROR: No se puede renombrar (No encontrado o es Raíz)");
+        // Intentar borrar directorio
+        Directorio sub = padre.buscarSubdirectorio(nombre);
+        if (sub != null) {
+            liberarRecursosRecursivo(sub);
+            padre.eliminarSubdirectorio(sub);
+            logConsola("✅ DIRECTORIO ELIMINADO: " + nombre);
+            if (!discoPausado) actualizarGUICompleta();
+            return true;
+        }
+        return false;
+    }
+
+    // =========================================================
+    //              GESTOR DE COLAS Y DISCO
+    // =========================================================
+    
+    // Método especial para encolar SIN ejecutar lógica (Modo Batch)
+    private void encolarSolicitudPendiente(String tipo, String ruta, String datos, int tam, String usu) {
+        SolicitudDisco sol = new SolicitudDisco(tipo, ruta, datos, tam, usu);
+        planificadorActual.agregarSolicitud(sol);
+        int pendientes = planificadorActual.getSolicitudesPendientes().getSize();
+        logConsola("⏸️ PENDIENTE (" + tipo + "): " + ruta + ". Total en cola: " + pendientes);
+    }
+    
+    // Método normal para efectos visuales (Modo Normal)
+    private void crearSolicitudDisco(String tipo, int bloque, String usuario) {
+        Proceso p = new Proceso(tipo, "sys", usuario);
+        SolicitudDisco s = new SolicitudDisco(p, tipo, bloque);
+        // En modo normal, la lógica ya se hizo
+        s.setLogicaEjecutada(true); 
+        planificadorActual.agregarSolicitud(s);
+    }
+
+    private void iniciarHiloDisco() {
+        hiloDisco = new Thread(() -> {
+            while (sistemaActivo) {
+                try {
+                    // SI ESTÁ PAUSADO, DUERME
+                    if (discoPausado) { Thread.sleep(200); continue; }
+                    
+                    SolicitudDisco solicitud = planificadorActual.obtenerSiguiente();
+                    
+                    if (solicitud != null) {
+                        procesarSolicitudDisco(solicitud);
+                    } else {
+                        Thread.sleep(200);
+                    }
+                } catch (Exception e) { }
+            }
+        });
+        hiloDisco.start();
+    }
+    
+    private void procesarSolicitudDisco(SolicitudDisco solicitud) {
+        logConsola("⚙️ PROCESANDO: " + solicitud.getTipoOperacion() + " -> " + 
+                   (solicitud.getRutaObjetivo() != null ? solicitud.getRutaObjetivo() : "Bloque " + solicitud.getBloqueSolicitado()));
+        
+        try {
+            Thread.sleep(2000); // Simular tiempo
+            
+            // --- EJECUCIÓN DIFERIDA (MODO BATCH) ---
+            if (!solicitud.isLogicaEjecutada()) {
+                String tipo = solicitud.getTipoOperacion();
+                String ruta = solicitud.getRutaObjetivo();
+                String datos = solicitud.getDatosAdicionales();
+                String usu = solicitud.getProcesoSolicitante().getUsuario();
+                int tam = solicitud.getTamañoBloques();
+                
+                switch(tipo) {
+                    case "CREATE": ejecutarLogicaCrearArchivo(ruta, tam, usu); break;
+                    case "CREATE_DIR": ejecutarLogicaCrearDirectorio(ruta); break;
+                    case "UPDATE": ejecutarLogicaActualizarArchivo(ruta, datos, usu); break;
+                    case "RENAME": ejecutarLogicaRenombrar(ruta, datos); break;
+                    case "DELETE": ejecutarLogicaEliminar(ruta, usu); break;
+                }
+                // Marcar como hecha para no repetir
+                solicitud.setLogicaEjecutada(true);
+                
+                // Forzar actualización visual final
+                actualizarGUICompleta();
+            }
+            // ---------------------------------------
+            
+            logConsola("✅ COMPLETADO.");
+            
+        } catch (InterruptedException e) { }
+    }
+
+    // =========================================================
+    //              UTILIDADES Y HELPERS
+    // =========================================================
+    
+    private String getNombreDesdeRuta(String ruta) {
+        int i = ruta.lastIndexOf('/');
+        return (i == 0) ? ruta.substring(1) : ruta.substring(i + 1);
+    }
+    
+    private String getPadreDesdeRuta(String ruta) {
+        int i = ruta.lastIndexOf('/');
+        return (i == 0) ? "/" : ruta.substring(0, i);
+    }
+    
+    private boolean error(String msg) {
+        logConsola("❌ " + msg);
         return false;
     }
     
-    /**
-     * @return the archivosEliminados
-     */
-    public int getArchivosEliminados() {
-        return archivosEliminados;
+    private boolean verificarPermisosEscritura(String usuario) {
+        return esModoAdministrador || "admin".equals(usuario);
     }
-/**
-     * Hilo que revisa constantemente el estado de los procesos.
-     * Actúa como el "Reloj" del Sistema Operativo para el planificador.
-     */
+    
+    private boolean verificarPermisosLectura(String usuario) { return true; }
+    
+    private boolean hayEspacioSuficiente(int n) { return (totalBloques - getBloquesOcupados()) >= n; }
+    
+    private void liberarRecursosRecursivo(Directorio dir) {
+        ListaSimple archs = dir.getArchivos();
+        for(int i=0; i<archs.getSize(); i++) liberarBloquesArchivo((Archivo)archs.get(i));
+        ListaSimple subs = dir.getSubdirectorios();
+        for(int i=0; i<subs.getSize(); i++) liberarRecursosRecursivo((Directorio)subs.get(i));
+    }
+    
+    private void liberarBloquesArchivo(Archivo archivo) {
+        Bloque actual = archivo.getPrimerBloque();
+        while (actual != null) {
+            Bloque sig = actual.getSiguienteBloque();
+            actual.liberarBloque();
+            actual = sig;
+        }
+    }
+    
+    private boolean asignacionSimple(Archivo archivo, int cantidad) { /* Usar asignarBloquesArchivo */ return false; }
+    
+    private boolean asignarBloquesArchivo(Archivo archivo, int cantidad) {
+        ListaSimple asignados = new ListaSimple();
+        for(int i=0; i<totalBloques && asignados.getSize()<cantidad; i++) {
+            if(bloquesDisco[i].estaLibre()) asignados.insertFinal(bloquesDisco[i]);
+        }
+        if(asignados.getSize() < cantidad) return false;
+        
+        Bloque primero = (Bloque)asignados.get(0);
+        archivo.setPrimerBloque(primero);
+        Bloque actual = primero;
+        for(int i=1; i<asignados.getSize(); i++) {
+            Bloque sig = (Bloque)asignados.get(i);
+            actual.setSiguienteBloque(sig);
+            actual = sig;
+        }
+        Color c = archivo.getColor();
+        for(int i=0; i<asignados.getSize(); i++) ((Bloque)asignados.get(i)).ocuparBloque(archivo.getNombre(), -1, c);
+        return true;
+    }
+    
+    private Archivo buscarArchivo(String ruta) {
+        String nombre = getNombreDesdeRuta(ruta);
+        String padre = getPadreDesdeRuta(ruta);
+        Directorio d = (padre.equals("/")) ? raiz : raiz.buscarDirectorioRecursivo(padre);
+        return (d != null) ? d.buscarArchivo(nombre) : null;
+    }
+
+    // --- PROCESOS CPU ---
+    public void solicitarOperacion(String tipo, String ruta, String usuario, int tam) {
+        // Este método es el punto de entrada de la GUI
+        // Dependiendo de la operación, llamamos a los métodos específicos
+        switch(tipo) {
+            case "CREAR": crearArchivo(ruta, tam, usuario); break;
+            case "CREAR_DIR": crearDirectorio(ruta, usuario); break;
+            case "ELIMINAR": eliminarArchivo(ruta, usuario); break;
+            // LEER y ACTUALIZAR se llaman directo desde PanelControl, pero si quisieras unificarlos:
+            case "LEER": leerArchivo(ruta, usuario); break;
+        }
+        // Crear proceso visual para la tabla
+        Proceso p = new Proceso(tipo, ruta, usuario, tam);
+        p.setManejadorArchivo(this);
+        colaProcesos.insertFinal(p);
+        p.iniciar();
+    }
+    
     private void iniciarHiloPlanificador() {
-        Thread hiloPlanificador = new Thread(() -> {
-            while (sistemaActivo) {
+        hiloPlanificador = new Thread(() -> {
+            while(sistemaActivo) {
                 try {
-                    // Ejecutar el planificador para limpiar procesos terminados
-                    // y actualizar la GUI si es necesario
                     planificarProcesos();
-                    
-                    // Revisar 4 veces por segundo
-                    Thread.sleep(250); 
-                } catch (InterruptedException e) {
-                    if (sistemaActivo) System.err.println("Hilo planificador interrumpido");
-                }
+                    Thread.sleep(250);
+                } catch(Exception e) {}
             }
         });
-        hiloPlanificador.setName("CPU-Scheduler-Thread");
-        hiloPlanificador.setDaemon(true);
         hiloPlanificador.start();
     }
+    
+    private void planificarProcesos() {
+        for(int i=0; i<procesosActivos.getSize(); i++) {
+            Proceso p = (Proceso)procesosActivos.get(i);
+            if(p.estaTerminado()) {
+                procesosActivos.remove(p);
+                i--;
+                if(!discoPausado) actualizarGUICompleta();
+            }
+        }
+        if(!colaProcesos.isEmpty()) {
+            Proceso p = (Proceso)colaProcesos.get(0);
+            if(p.estaListo()) {
+                p.setEstado(Proceso.Estado.EJECUTANDO);
+                colaProcesos.remove(p);
+                procesosActivos.insertFinal(p);
+            }
+        }
+    }
+    
+    // =========================================================
+    //              MÉTODOS DE AYUDA Y LOGGING
+    // =========================================================
+
+    /**
+     * Envía un mensaje a la consola de la interfaz (o System.out si no hay GUI).
+     */
+    public void logConsola(String msg) { // <--- Cámbialo a PUBLIC por si acaso
+        if (panelConsola != null) {
+            panelConsola.agregarLinea(msg);
+        } else {
+            System.out.println(msg);
+        }
+    }
+
+    // --- SETTERS Y GETTERS ---
+    private void actualizarGUICompleta() {
+        SwingUtilities.invokeLater(() -> {
+            if (panelArchivos != null) panelArchivos.actualizarArbol();
+            if (panelDisco != null) panelDisco.actualizarDisco();
+            if (panelTablaAsignacion != null) panelTablaAsignacion.actualizarTabla();
+            if (panelDetalles != null) panelDetalles.actualizarDetalles();
+            if (panelEstadisticas != null) panelEstadisticas.actualizarGrafica();
+        });
+    }
+    
+    public void setPanelConsola(PanelConsola p) { this.panelConsola = p; if(bufferManager==null) bufferManager=new BufferManager(p); }
+    public void setPanelArchivos(PanelArchivos p) { this.panelArchivos = p; }
+    public void setPanelDisco(PanelDisco p) { this.panelDisco = p; }
+    public void setPanelTablaAsignacion(PanelTablaAsignacion p) { this.panelTablaAsignacion = p; }
+    public void setPanelDetalles(PanelDetalles p) { this.panelDetalles = p; }
+    public void setPanelEstadisticas(PanelEstadisticas p) { this.panelEstadisticas = p; }
+    public void setPanelOutput(PanelOutput p) {}
+    
+    public void setModoAdministrador(boolean admin) { 
+        this.esModoAdministrador = admin; 
+        this.usuarioActual = (Usuario) usuarios.get(admin?0:1);
+    }
+    public void setDiscoPausado(boolean pausado) { 
+        this.discoPausado = pausado; 
+        if(pausado) logConsola("⏸️ MODO PROCESO: Cola pausada.");
+        else logConsola("▶️ MODO PROCESO: Procesando...");
+    }
+    
+    
+    
+    public void cambiarPlanificador(String tipo) {
+        ListaSimple pend = planificadorActual.getSolicitudesPendientes();
+        switch(tipo) {
+            case "FIFO": planificadorActual = new FIFO(panelConsola); break;
+            case "SSTF": planificadorActual = new SSTF(panelConsola); break;
+            case "SCAN": planificadorActual = new SCAN(); break;
+            case "C-SCAN": planificadorActual = new CSCAN(); break;
+        }
+        planificadorActual.setCabezalActual(cabezalActual);
+        if(pend!=null) for(int i=0; i<pend.getSize(); i++) planificadorActual.agregarSolicitud((SolicitudDisco)pend.get(i));
+        logConsola("Planificador: " + tipo);
+    }
+    
+    public Bloque[] getBloquesDisco() { return bloquesDisco; }
+    public Directorio getRaiz() { return raiz; }
+    public ListaSimple getColaProcesos() { return colaProcesos; }
+    public ListaSimple getProcesosActivos() { return procesosActivos; }
+    public PlanificadorDisco getPlanificadorActual() { return planificadorActual; }
+    public boolean esAdministrador() { return esModoAdministrador; }
+    public Usuario getUsuarioActual() { return usuarioActual; }
+    public int getTotalBloques() { return totalBloques; }
+    public int getBloquesOcupados() { int c=0; for(Bloque b:bloquesDisco) if(b.estaOcupado()) c++; return c; }
+    public int getArchivosCreados() { return archivosCreados; }
+    public int getArchivosEliminados() { return archivosEliminados; }
+    public int getOperacionesRealizadas() { return operacionesRealizadas; }
 }

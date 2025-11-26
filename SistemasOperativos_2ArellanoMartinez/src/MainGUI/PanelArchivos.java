@@ -85,7 +85,7 @@ public class PanelArchivos extends JPanel {
                 // 1. La raíz del árbol AHORA contiene el objeto Directorio Raíz real
                 DefaultMutableTreeNode nodoRaiz = new DefaultMutableTreeNode(manejador.getRaiz());
                 
-                // 2. Llenamos el árbol
+                // 2. Llenamos el árbol (Aquí se llama al método privado)
                 agregarDirectorioAlArbol(manejador.getRaiz(), nodoRaiz);
                 
                 modeloArbol.setRoot(nodoRaiz);
@@ -99,8 +99,9 @@ public class PanelArchivos extends JPanel {
         });
     }
     
+    // MÉTODO RECURSIVO UNIFICADO
     private void agregarDirectorioAlArbol(Directorio directorio, DefaultMutableTreeNode nodoPadre) {
-        // Agregar subdirectorios
+        // 1. Agregar subdirectorios
         ListaSimple subdirs = directorio.getSubdirectorios();
         for (int i = 0; i < subdirs.getSize(); i++) {
             Directorio subdir = (Directorio) subdirs.get(i);
@@ -112,19 +113,23 @@ public class PanelArchivos extends JPanel {
             agregarDirectorioAlArbol(subdir, nodoSubdir);
         }
         
-        // Agregar archivos
+        // 2. Agregar archivos (CON FILTRO)
         ListaSimple archivos = directorio.getArchivos();
         for (int i = 0; i < archivos.getSize(); i++) {
             Archivo archivo = (Archivo) archivos.get(i);
-            // Guardamos el OBJETO Archivo
-            DefaultMutableTreeNode nodoArchivo = new DefaultMutableTreeNode(archivo);
-            nodoPadre.add(nodoArchivo);
+            
+            // --- FILTRO: SOLO MOSTRAR SI YA FUE PROCESADO POR EL DISCO ---
+            if (archivo.isConfirmadoEnDisco()) { 
+                // Guardamos el OBJETO Archivo
+                DefaultMutableTreeNode nodoArchivo = new DefaultMutableTreeNode(archivo);
+                nodoPadre.add(nodoArchivo);
+            }
+            // ---------------------
         }
     }
     
     /**
      * Obtiene la ruta exacta preguntándole directamente al objeto seleccionado.
-     * ¡Esta es la corrección clave!
      */
     public String obtenerRutaSeleccionada() {
         DefaultMutableTreeNode nodo = (DefaultMutableTreeNode) arbolArchivos.getLastSelectedPathComponent();
@@ -139,11 +144,9 @@ public class PanelArchivos extends JPanel {
             return ((Directorio) obj).getRutaCompleta();
         } else if (obj instanceof Archivo) {
             // Si seleccionaste un archivo, devolvemos la ruta de SU CARPETA PADRE
-            // (Para crear algo "al lado" de este archivo)
             String rutaArchivo = ((Archivo) obj).getRutaCompleta();
-            // Cortamos el nombre del archivo para obtener la carpeta
             int ultimoSlash = rutaArchivo.lastIndexOf('/');
-            if (ultimoSlash == 0) return "/"; // Está en la raíz
+            if (ultimoSlash == 0) return "/"; 
             return rutaArchivo.substring(0, ultimoSlash);
         }
         

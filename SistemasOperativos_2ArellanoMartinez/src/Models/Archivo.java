@@ -32,6 +32,7 @@ public class Archivo {
     
     private boolean estaAbierto;
     private boolean esPublico;
+    private boolean confirmadoEnDisco;
     
     // Color único para representar este archivo en el PanelDisco
     private Color color; 
@@ -46,7 +47,7 @@ public class Archivo {
         
         this.tamañoBytes = 0;
         this.tamañoBloques = 0; 
-        
+        this.confirmadoEnDisco = false; 
         this.usuarioPropietario = usuarioPropietario;
         this.rutaCompleta = rutaCompleta;
         this.permisos = "rw-r--r--";
@@ -190,5 +191,12 @@ public class Archivo {
     @Override
     public String toString() {
         return nombre + " (" + tamañoBloques + "/" + bloquesReservados + " blqs)";
+    }
+    public boolean isConfirmadoEnDisco() {
+        return confirmadoEnDisco;
+    }
+
+    public void setConfirmadoEnDisco(boolean confirmado) {
+        this.confirmadoEnDisco = confirmado;
     }
 }
