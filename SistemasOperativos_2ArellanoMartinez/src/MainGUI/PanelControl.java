@@ -5,7 +5,6 @@
 package MainGUI;
 
 import Managers.ManejadorArchivo;
-import Models.Archivo;
 import javax.swing.*;
 import java.awt.*;
 
@@ -16,7 +15,7 @@ public class PanelControl extends JPanel {
     private PanelDisco panelDisco;
     private PanelTablaAsignacion panelTablaAsignacion;
     
-    // Botones CRUD Estándar
+    // Botones CRUD
     private JButton btnCrear, btnCrearDir, btnEditar, btnEliminar, btnActualizar;
     
     // Botón Especial para Modo Proceso
@@ -39,7 +38,7 @@ public class PanelControl extends JPanel {
         // --- CRUD ---
         btnCrear = new JButton("Crear Archivo");
         btnCrearDir = new JButton("Crear Directorio");
-        btnEditar = new JButton("Editar Archivo");
+        btnEditar = new JButton("Editar / Renombrar");
         btnEliminar = new JButton("Eliminar");
         
         // --- PROCESAR COLA (Inicialmente oculto) ---
@@ -61,20 +60,16 @@ public class PanelControl extends JPanel {
         
         configurarEventos();
         
-        // --- TIMER PARA ACTUALIZAR EL BOTÓN ---
+        // Timer para actualizar el contador del botón cada 500ms
         new Timer(500, e -> {
             if (btnProcesarCola.isVisible() && manejador.getPlanificadorActual() != null) {
                 int pendientes = manejador.getPlanificadorActual().getSolicitudesPendientes().getSize();
                 btnProcesarCola.setText("▶ PROCESAR COLA (" + pendientes + ")");
                 
-                if (pendientes > 0) {
-                    btnProcesarCola.setBackground(new Color(255, 150, 150)); // Rojo si hay carga
-                } else {
-                    btnProcesarCola.setBackground(new Color(144, 238, 144)); // Verde si está libre
-                }
+                if (pendientes > 0) btnProcesarCola.setBackground(new Color(255, 100, 100)); // Rojo claro
+                else btnProcesarCola.setBackground(new Color(144, 238, 144)); // Verde claro
             }
         }).start();
-    
     }
     
     private void configurarEventos() {
@@ -91,29 +86,20 @@ public class PanelControl extends JPanel {
         
         // Evento para liberar la cola
         btnProcesarCola.addActionListener(e -> {
-            panelConsola.agregarLinea("▶ LIBERANDO EL DISCO... Procesando cola acumulada.");
-            manejador.setDiscoPausado(false); // Despausar el disco momentáneamente
-            
-            // Opcional: Si quieres que se vuelva a pausar después, necesitarías lógica extra.
-            // Por ahora, asumimos que al darle Play, procesa todo lo pendiente.
+            manejador.procesarColaPendiente();
         });
     }
     
-    /**
-     * Configura el panel según si estamos en Modo Admin Normal o Modo Proceso (Cola)
-     */
     public void setModoBatch(boolean activo) {
         btnProcesarCola.setVisible(activo);
-        
         if (activo) {
             setBorder(BorderFactory.createTitledBorder("Modo ADMIN PROCESO (Cola en Espera)"));
-            btnProcesarCola.setText("▶ PROCESAR COLA (" + manejador.getPlanificadorActual().getSolicitudesPendientes().getSize() + ")");
         } else {
             setBorder(BorderFactory.createTitledBorder("Gestión de Sistema (Admin)"));
         }
     }
     
-    // --- MÉTODOS CRUD (Sin cambios) ---
+    // --- MÉTODOS CRUD ---
     
     private void crearArchivo() {
         String rutaBase = panelArchivos.obtenerRutaSeleccionada();
@@ -124,8 +110,7 @@ public class PanelControl extends JPanel {
                 int tamano = Integer.parseInt(tamanoStr);
                 String rutaCompleta = rutaBase.equals("/") ? "/" + nombre : rutaBase + "/" + nombre;
                 manejador.solicitarOperacion("CREAR", rutaCompleta, "admin", tamano);
-                panelConsola.agregarLinea("Solicitud 'CREAR' para: " + rutaCompleta);
-                if (btnProcesarCola.isVisible()) actualizarTextoBotonCola();
+                panelConsola.agregarLinea("Solicitud 'CREAR' enviada para: " + rutaCompleta);
             } catch (NumberFormatException ex) { JOptionPane.showMessageDialog(this, "Tamaño inválido."); }
         }
     }
@@ -136,77 +121,39 @@ public class PanelControl extends JPanel {
         if (nombre != null && !nombre.trim().isEmpty()) {
             String rutaCompleta = rutaBase.equals("/") ? "/" + nombre : rutaBase + "/" + nombre;
             manejador.solicitarOperacion("CREAR_DIR", rutaCompleta, "admin", 0);
-            panelConsola.agregarLinea("Solicitud 'CREAR_DIR' para: " + rutaCompleta);
-            if (btnProcesarCola.isVisible()) actualizarTextoBotonCola();
+            
+            panelConsola.agregarLinea("Solicitud 'CREAR_DIR' enviada para: " + rutaCompleta);
         }
     }
     
     private void editarArchivo() {
-        // 1. Obtener el OBJETO real seleccionado (no solo el texto)
-        Object objSeleccionado = panelArchivos.getObjetoSeleccionado();
-        
-        if (objSeleccionado == null) {
-            JOptionPane.showMessageDialog(this, "Seleccione un archivo o directorio del árbol primero.");
-            return;
-        }
+        String nombreSeleccionado = panelArchivos.getArchivoSeleccionado();
+        if (nombreSeleccionado == null) { JOptionPane.showMessageDialog(this, "Seleccione algo primero."); return; }
+        String rutaCompleta = panelArchivos.obtenerRutaSeleccionada();
         
         // CASO A: Es un DIRECTORIO -> Renombrar
-        if (objSeleccionado instanceof Models.Directorio) {
-            Models.Directorio dir = (Models.Directorio) objSeleccionado;
-            String nombreActual = dir.getNombre();
-            String rutaCompleta = dir.getRutaCompleta();
-            
-            String nuevoNombre = JOptionPane.showInputDialog(this, 
-                "Renombrar directorio '" + nombreActual + "':", 
-                nombreActual);
-                
+        if (panelArchivos.esDirectorioSeleccionado()) {
+            String nuevoNombre = JOptionPane.showInputDialog(this, "Renombrar '" + nombreSeleccionado + "':", nombreSeleccionado);
             if (nuevoNombre != null && !nuevoNombre.trim().isEmpty()) {
                 manejador.renombrarDirectorio(rutaCompleta, nuevoNombre, "admin");
+                panelConsola.agregarLinea("Solicitud 'RENAME' enviada para: " + nombreSeleccionado);
             }
         } 
         // CASO B: Es un ARCHIVO -> Editar Contenido
-        else if (objSeleccionado instanceof Models.Archivo) {
-            Models.Archivo archivo = (Models.Archivo) objSeleccionado;
-            
-            // --- CORRECCIÓN CLAVE ---
-            // Usamos la ruta exacta que el archivo ya tiene guardada.
-            // No la reconstruimos manualmente para evitar errores de barras "/".
-            String rutaArchivo = archivo.getRutaCompleta(); 
-            String nombreArchivo = archivo.getNombre();
-            
-            // 1. Leer contenido
+        else {
+            String rutaArchivo = rutaCompleta.equals("/") ? "/" + nombreSeleccionado : rutaCompleta + "/" + nombreSeleccionado;
             String contenidoActual = manejador.leerArchivo(rutaArchivo, "admin");
+            if (contenidoActual == null) contenidoActual = "";
             
-            // Si devuelve null, es que hubo un error de lectura real, no de ruta
-            if (contenidoActual == null) {
-                panelConsola.agregarLinea("❌ Error leyendo archivo: " + rutaArchivo);
-                return;
-            }
-            
-            // 2. Mostrar Editor
             JTextArea textArea = new JTextArea(15, 50); 
             textArea.setText(contenidoActual);
-            textArea.setLineWrap(true);
-            textArea.setWrapStyleWord(true);
+            int result = JOptionPane.showConfirmDialog(this, new JScrollPane(textArea), "Editando: " + nombreSeleccionado, JOptionPane.OK_CANCEL_OPTION);
             
-            int result = JOptionPane.showConfirmDialog(this, new JScrollPane(textArea), 
-                    "Editando: " + nombreArchivo, JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-            
-            // 3. Guardar Cambios
             if (result == JOptionPane.OK_OPTION) {
                 String nuevoContenido = textArea.getText();
                 if (!nuevoContenido.equals(contenidoActual)) {
-                    boolean exito = manejador.actualizarArchivo(rutaArchivo, nuevoContenido, "admin");
-                    if (exito) {
-                        panelConsola.agregarLinea("Archivo editado: " + nombreArchivo);
-                        
-                        // Refrescar ficha técnica si está visible
-                        panelArchivos.actualizarArbol(); // Para actualizar tamaño en el árbol
-                        Object nuevoObj = panelArchivos.getObjetoSeleccionado();
-                        // (Opcional: forzar actualización del panel de detalles)
-                    } else {
-                        panelConsola.agregarLinea("ERROR: No se pudo guardar cambios en " + rutaArchivo);
-                    }
+                    manejador.actualizarArchivo(rutaArchivo, nuevoContenido, "admin");
+                    panelConsola.agregarLinea("Solicitud 'UPDATE' enviada para: " + nombreSeleccionado);
                 }
             }
         }
@@ -226,30 +173,9 @@ public class PanelControl extends JPanel {
              } else {
                  rutaCompleta = rutaBase.equals("/") ? "/" + nombreSeleccionado : rutaBase + "/" + nombreSeleccionado;
              }
+             
              manejador.solicitarOperacion("ELIMINAR", rutaCompleta, "admin", 0);
-             panelConsola.agregarLinea("Solicitud 'ELIMINAR' para: " + nombreSeleccionado);
-             if (btnProcesarCola.isVisible()) actualizarTextoBotonCola();
+             panelConsola.agregarLinea("Solicitud 'ELIMINAR' enviada para: " + nombreSeleccionado);
         }
-    }
-    
-    private void actualizarTextoBotonCola() {
-        // Pequeño delay para dar tiempo a que la solicitud entre en la cola
-        SwingUtilities.invokeLater(() -> {
-            try { Thread.sleep(100); } catch (Exception e) {}
-            int pendientes = manejador.getPlanificadorActual().getSolicitudesPendientes().getSize();
-            btnProcesarCola.setText("▶ PROCESAR COLA (" + pendientes + ")");
-        });
-    }
-    
-    /**
-     * Método público llamado por el Manejador para actualizar el contador del botón
-     */
-    public void actualizarContadorCola() {
-        SwingUtilities.invokeLater(() -> {
-            if (btnProcesarCola.isVisible() && manejador.getPlanificadorActual() != null) {
-                int pendientes = manejador.getPlanificadorActual().getSolicitudesPendientes().getSize();
-                btnProcesarCola.setText("▶ PROCESAR COLA (" + pendientes + ")");
-            }
-        });
     }
 }
