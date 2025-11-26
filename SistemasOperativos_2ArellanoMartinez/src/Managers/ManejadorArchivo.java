@@ -584,6 +584,32 @@ public class ManejadorArchivo {
         if(pend!=null) for(int i=0; i<pend.getSize(); i++) planificadorActual.agregarSolicitud((SolicitudDisco)pend.get(i));
         logConsola("Planificador: " + tipo);
     }
+    
+    /**
+     * Método para restaurar el estado del sistema desde la persistencia (JSON).
+     * Restaura contadores, política y usuario.
+     */
+    public void cargarDatosSistema(int creados, int eliminados, int operaciones, String politicaNombre, String usuarioNombre, boolean esAdmin) {
+        this.archivosCreados = creados;
+        this.archivosEliminados = eliminados;
+        this.operacionesRealizadas = operaciones;
+        
+        // Restaurar Modo y Usuario
+        this.esModoAdministrador = esAdmin;
+        // Buscar el objeto usuario por nombre
+        for(int i = 0; i < usuarios.getSize(); i++) {
+            Usuario u = (Usuario) usuarios.get(i);
+            if (u.getUsername().equals(usuarioNombre)) {
+                this.usuarioActual = u;
+                break;
+            }
+        }
+        
+        // Restaurar Política
+        cambiarPlanificador(politicaNombre);
+        
+        logConsola("🔄 SISTEMA RESTAURADO: " + usuarioNombre + " | " + politicaNombre + " | Ops: " + operaciones);
+    }
 
     // Getters
     public Bloque[] getBloquesDisco() { return bloquesDisco; }

@@ -1,9 +1,9 @@
 {
-  "archivosCreados": 3,
-  "archivosEliminados": 1,
-  "operacionesRealizadas": 2,
-  "bloquesOcupados": 5,
-  "planificadorActual": "FIFO",
+  "archivosCreados": 1,
+  "archivosEliminados": 0,
+  "operacionesRealizadas": 0,
+  "bloquesOcupados": 0,
+  "planificadorActual": "C-SCAN",
   "usuarioActual": "admin",
   "esModoAdministrador": true
 }

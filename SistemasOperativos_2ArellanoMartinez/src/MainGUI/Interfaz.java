@@ -12,6 +12,8 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
+import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import javax.swing.BorderFactory;
@@ -212,21 +214,77 @@ public class Interfaz extends JFrame {
     // ... (Métodos de guardar/cargar y estado sistema igual) ...
     // (Copia el resto de tu Interfaz.java original aquí)
     
+    // ===== PERSISTENCIA =====
+    
     private void guardarEstado() {
         try {
             EstadoSistema estado = new EstadoSistema(manejador);
             String json = gson.toJson(estado);
+            
+            // Usamos try-with-resources para asegurar cierre del archivo
             try (FileWriter writer = new FileWriter(ARCHIVO_CONFIG)) {
                 writer.write(json);
             }
-            panelConsola.agregarLinea("✅ Estado guardado en: " + ARCHIVO_CONFIG);
+            
+            panelConsola.agregarLinea("✅ CONFIGURACIÓN GUARDADA EN: " + ARCHIVO_CONFIG);
+            panelConsola.agregarLinea("   - Archivos creados: " + estado.getArchivosCreados());
+            panelConsola.agregarLinea("   - Política: " + estado.getPlanificadorActual());
+            
         } catch (IOException e) {
-            panelConsola.agregarLinea("❌ Error al guardar: " + e.getMessage());
+            panelConsola.agregarLinea("❌ Error crítico al guardar: " + e.getMessage());
+            e.printStackTrace();
         }
     }
     
     private void cargarEstado() {
-        panelConsola.agregarLinea("🔄 Carga de estado en desarrollo...");
+        try {
+            File archivo = new java.io.File(ARCHIVO_CONFIG);
+            if (!archivo.exists()) {
+                panelConsola.agregarLinea("⚠️ No existe archivo de guardado previo (" + ARCHIVO_CONFIG + ")");
+                return;
+            }
+            
+            // Leer JSON
+            FileReader reader = new FileReader(archivo);
+            EstadoSistema estado = gson.fromJson(reader, EstadoSistema.class);
+            reader.close();
+            
+            if (estado != null) {
+                panelConsola.agregarLinea("🔄 CARGANDO ESTADO...");
+                
+                // 1. Restaurar datos en el Manejador
+                manejador.cargarDatosSistema(
+                    estado.getArchivosCreados(),
+                    estado.getArchivosEliminados(),
+                    estado.getOperacionesRealizadas(),
+                    estado.getPlanificadorActual(),
+                    estado.getUsuarioActual(),
+                    estado.isEsModoAdministrador()
+                );
+                
+                // 2. Actualizar Interfaz Visual
+                
+                // Restaurar Combo de Política
+                if (estado.getPlanificadorActual() != null) {
+                    comboPoliticas.setSelectedItem(estado.getPlanificadorActual());
+                }
+                
+                // Restaurar Modo (Admin/User)
+                // Esto activará/desactivará los paneles correctos
+                String modo = estado.isEsModoAdministrador() ? "ADMIN" : "USER";
+                cambiarModo(modo); 
+                
+                // Refrescar barra inferior
+                panelDetalles.actualizarDetalles();
+                
+                panelConsola.agregarLinea("✅ CARGA COMPLETADA EXITOSAMENTE.");
+                panelConsola.agregarLinea("   Nota: El disco físico inicia limpio en versión ligera.");
+            }
+            
+        } catch (Exception e) {
+            panelConsola.agregarLinea("❌ Error al cargar estado: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
     
     public static void main(String[] args) {
@@ -235,27 +293,46 @@ public class Interfaz extends JFrame {
         });
     }
 // Clase interna para el estado del sistema (JSON)
+    // Debe ser static y tener constructor vacío para que Gson funcione bien
     private static class EstadoSistema {
         private int archivosCreados;
         private int archivosEliminados;
         private int operacionesRealizadas;
         private int bloquesOcupados;
         private String planificadorActual;
-        private String usuarioActual; // Aquí esperamos un String
+        private String usuarioActual;
         private boolean esModoAdministrador;
         
+        // 1. Constructor VACÍO (Obligatorio para cargar)
+        public EstadoSistema() {}
+        
+        // 2. Constructor con datos (Para guardar)
         public EstadoSistema(ManejadorArchivo manejador) {
             this.archivosCreados = manejador.getArchivosCreados();
             this.archivosEliminados = manejador.getArchivosEliminados();
             this.operacionesRealizadas = manejador.getOperacionesRealizadas();
             this.bloquesOcupados = manejador.getBloquesOcupados();
             this.planificadorActual = manejador.getPlanificadorActual().getNombrePolitica();
-            
-            // --- CORRECCIÓN AQUÍ ---
-            // Obtenemos el objeto Usuario y le pedimos su nombre (String)
             this.usuarioActual = manejador.getUsuarioActual().getUsername(); 
-            // -----------------------
-            
             this.esModoAdministrador = manejador.esAdministrador();
         }
+        
+        // 3. Getters y Setters (Necesarios para Gson)
+        public int getArchivosCreados() { return archivosCreados; }
+        public void setArchivosCreados(int v) { this.archivosCreados = v; }
+        
+        public int getArchivosEliminados() { return archivosEliminados; }
+        public void setArchivosEliminados(int v) { this.archivosEliminados = v; }
+        
+        public int getOperacionesRealizadas() { return operacionesRealizadas; }
+        public void setOperacionesRealizadas(int v) { this.operacionesRealizadas = v; }
+        
+        public String getPlanificadorActual() { return planificadorActual; }
+        public void setPlanificadorActual(String v) { this.planificadorActual = v; }
+        
+        public String getUsuarioActual() { return usuarioActual; }
+        public void setUsuarioActual(String v) { this.usuarioActual = v; }
+        
+        public boolean isEsModoAdministrador() { return esModoAdministrador; }
+        public void setEsModoAdministrador(boolean v) { this.esModoAdministrador = v; }
     }}
