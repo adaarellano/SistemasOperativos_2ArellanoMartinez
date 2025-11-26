@@ -117,70 +117,130 @@ public class ManejadorArchivo {
     //              MÉTODOS CRUD PÚBLICOS
     // =========================================================
     
-    public boolean crearArchivo(String ruta, int tamaño, String usuario) {
-        if (!verificarPermisosEscritura(usuario)) return error("Sin permisos");
+    public boolean crearArchivo(String ruta, int tamañoBloques, String usuario) {
+        if (!verificarPermisosEscritura(usuario)) {
+            return error("Sin permisos para crear archivo");
+        }
+        
+        // MODO BATCH: Encolamos la solicitud con Bloque 0 (porque aún no existe)
         if (discoPausado) {
-            encolarSolicitudPendiente("CREATE", ruta, null, tamaño, usuario);
+            encolarSolicitudPendiente("CREATE", ruta, null, tamañoBloques, usuario, 0);
             return true;
         }
-        return ejecutarLogicaCrearArchivo(ruta, tamaño, usuario);
+        
+        // MODO NORMAL: Ejecutamos lógica inmediata
+        return ejecutarLogicaCrearArchivo(ruta, tamañoBloques, usuario);
+    
     }
     
     public boolean crearDirectorio(String ruta, String usuario) {
-        if (!verificarPermisosEscritura(usuario)) return error("Sin permisos");
+        if (!verificarPermisosEscritura(usuario)) {
+            return error("Sin permisos para crear directorio");
+        }
+        
+        // MODO BATCH
         if (discoPausado) {
-            encolarSolicitudPendiente("CREATE_DIR", ruta, null, 0, usuario);
+            encolarSolicitudPendiente("CREATE_DIR", ruta, null, 0, usuario, 0);
             return true;
         }
+        
+        // MODO NORMAL
         return ejecutarLogicaCrearDirectorio(ruta);
     }
     
     public boolean actualizarArchivo(String ruta, String datos, String usuario) {
         if (!verificarPermisosEscritura(usuario)) return false;
+        
         if (discoPausado) {
-            encolarSolicitudPendiente("UPDATE", ruta, datos, 0, usuario);
+            // BUSCAR EL BLOQUE REAL ANTES DE ENCOLAR
+            int bloque = 0;
+            Archivo a = buscarArchivo(ruta);
+            if (a != null && a.getPrimerBloque() != null) {
+                bloque = a.getPrimerBloque().getIdBloque();
+            }
+            
+            // Pasamos el bloque encontrado (ej: 20)
+            encolarSolicitudPendiente("UPDATE", ruta, datos, 0, usuario, bloque);
             return true;
         }
         return ejecutarLogicaActualizarArchivo(ruta, datos, usuario);
     }
     
-    public boolean renombrarDirectorio(String ruta, String nuevoNombre, String usuario) {
+    public boolean renombrarDirectorio(String rutaCompleta, String nuevoNombre, String usuario) {
         if (!verificarPermisosEscritura(usuario)) return false;
+        
+        // MODO BATCH
         if (discoPausado) {
-            encolarSolicitudPendiente("RENAME", ruta, nuevoNombre, 0, usuario);
+            // Pasamos 'nuevoNombre' en el campo de datos adicionales
+            encolarSolicitudPendiente("RENAME", rutaCompleta, nuevoNombre, 0, usuario, 0);
             return true;
         }
-        return ejecutarLogicaRenombrar(ruta, nuevoNombre);
+        
+        // MODO NORMAL
+        return ejecutarLogicaRenombrar(rutaCompleta, nuevoNombre);
     }
     
     public boolean eliminarArchivo(String ruta, String usuario) {
-        if (!verificarPermisosEscritura(usuario)) return error("Sin permisos");
+        if (!verificarPermisosEscritura(usuario)) {
+            logConsola("ERROR: Sin permisos.");
+            return false;
+        }
+        
         if (discoPausado) {
-            encolarSolicitudPendiente("DELETE", ruta, null, 0, usuario);
+            // Buscar el bloque real para que la eliminación respete el orden del disco
+            int bloque = 0;
+            // Nota: buscarArchivo solo busca archivos, si es directorio devolverá null y usará 0.
+            // Para efectos de prueba de planificador, usaremos archivos.
+            Archivo a = buscarArchivo(ruta);
+            if (a != null && a.getPrimerBloque() != null) {
+                bloque = a.getPrimerBloque().getIdBloque();
+            }
+            
+            encolarSolicitudPendiente("DELETE", ruta, null, 0, usuario, bloque);
             return true;
         }
+        
         return ejecutarLogicaEliminar(ruta, usuario);
     }
     
     public String leerArchivo(String ruta, String usuario) {
         if (!verificarPermisosLectura(usuario)) return null;
+
         Archivo archivo = buscarArchivo(ruta);
         if (archivo == null) {
             logConsola("❌ ERROR: Archivo no encontrado: " + ruta);
             return null;
         }
-        
-        // Lectura inmediata para obtener datos (simulación visual aparte)
-        Bloque primer = archivo.getPrimerBloque();
-        if (primer != null && bufferManager != null && bufferManager.leerBloque(primer.getIdBloque()) != null) {
-            logConsola("✅ [Buffer] CACHE HIT!");
-        } else {
-            // Si no está en buffer, simulamos la petición de lectura
-            crearSolicitudDisco("READ", (primer!=null?primer.getIdBloque():0), usuario);
+
+        // 1. Buffer Check (Solo si no estamos pausados o para lectura rápida)
+        Bloque primerBloque = archivo.getPrimerBloque();
+        if (primerBloque != null && bufferManager != null) {
+            // Intentar leer de RAM
+            if (bufferManager.leerBloque(primerBloque.getIdBloque()) != null) {
+                logConsola("✅ [Buffer] CACHE HIT! (Leído de RAM)");
+                operacionesRealizadas++;
+                return archivo.leerContenido();
+            }
         }
+        
+        // 2. Si es CACHE MISS, hay que ir al disco
+        logConsola("❌ [Buffer] CACHE MISS! Solicitando al disco...");
+        
+        // Obtener el bloque físico real para que el planificador lo ordene
+        int bloqueReal = (primerBloque != null) ? primerBloque.getIdBloque() : 0;
+
+        // MODO BATCH: Encolamos con el número de bloque correcto
+        if (discoPausado) {
+            encolarSolicitudPendiente("READ", ruta, null, 0, usuario, bloqueReal);
+            return archivo.leerContenido(); // Devolvemos datos lógicos
+        }
+        
+        // MODO NORMAL: Solicitud visual inmediata
+        crearSolicitudDisco("READ", bloqueReal, usuario);
         operacionesRealizadas++;
         return archivo.leerContenido();
     }
+        
 
     // =========================================================
     //              LÓGICA INTERNA (REAL)
@@ -283,20 +343,24 @@ public class ManejadorArchivo {
     //              PROCESAMIENTO DE COLA (BATCH)
     // =========================================================
 
-    private void encolarSolicitudPendiente(String tipo, String ruta, String datos, int tam, String usu) {
-        // Crear proceso visual
+    // Método especial para encolar SIN ejecutar lógica (Modo Batch)
+    // ACEPTA 'bloqueReal' para que C-SCAN y SSTF puedan ordenar la cola correctamente
+    private void encolarSolicitudPendiente(String tipo, String ruta, String datos, int tam, String usu, int bloqueReal) {
+        // 1. Crear Proceso visual (para la tabla de procesos)
         Proceso p = new Proceso(tipo, ruta, usu, tam);
         p.setManejadorArchivo(this);
         colaProcesos.insertFinal(p);
-        p.iniciar();
+        p.iniciar(); // Se queda en estado LISTO
         
-        // Crear solicitud física con datos diferidos
+        // 2. Crear Solicitud Física (para el planificador)
         SolicitudDisco sol = new SolicitudDisco(tipo, ruta, datos, tam, usu);
-        sol.setLogicaEjecutada(false);
+        sol.setLogicaEjecutada(false); // Marcar como pendiente de lógica
+        sol.setBloqueSolicitado(bloqueReal); // ¡IMPORTANTE PARA ORDENAMIENTO!
+        
         planificadorActual.agregarSolicitud(sol);
         
         int pendientes = planificadorActual.getSolicitudesPendientes().getSize();
-        logConsola("⏸️ PENDIENTE (" + tipo + "): " + ruta + ". Total en cola: " + pendientes);
+        logConsola("⏸️ PENDIENTE (" + tipo + "): " + ruta + " [Bloque " + bloqueReal + "]. Total en cola: " + pendientes);
     }
     
     public void procesarColaPendiente() {
